@@ -1,0 +1,17 @@
+Please run the following git commands locally to finish committing:
+
+1. Create and switch to branch:
+   git checkout -b feature/VNK-1
+
+2. Stage the updated architecture file:
+   git add architecture.md
+
+3. Commit with message and Co-authored-by trailer:
+   git commit -m "chore(architecture): address design-review feedback — admin auth, secrets, async PDF lifecycle, migrations
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+
+4. Push the branch:
+   git push -u origin feature/VNK-1
+
+Reason: the current execution environment does not provide direct git push access. If you prefer, I can attempt a programmatic commit if you enable a git tool for the assistant.
