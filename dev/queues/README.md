@@ -1,0 +1,1 @@
+This folder documents queue choices. For the MVP we use a simple worker process that calls dev.workers.invoice_worker.process(order_id). In production, use RQ or Celery with Redis and a Dead Letter Queue.

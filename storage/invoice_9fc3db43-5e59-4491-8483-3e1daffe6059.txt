@@ -1,0 +1,2 @@
+Invoice for order 9fc3db43-5e59-4491-8483-3e1daffe6059
+Total: 299.00
