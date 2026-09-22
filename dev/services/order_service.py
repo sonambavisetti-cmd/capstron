@@ -9,8 +9,36 @@ from dev.validation import validate_order_payload
 payment_provider = MockPayment()
 
 
+SUPPORTED_CURRENCIES = {"INR"}
+
+
+def _get_default_currency() -> str:
+    """Return the configured default currency.
+
+    VNK-98: Currency is configuration-driven but defaults to INR.
+    """
+    # Keep configuration local/minimal for this story to avoid introducing
+    # new application-wide config plumbing.
+    import os
+
+    return (os.getenv("DEFAULT_CURRENCY") or "INR").upper()
+
+
+def _validate_currency(currency: str) -> None:
+    """Fail-fast currency validation.
+
+    Must run before creating an order or decrementing inventory.
+    """
+    if currency not in SUPPORTED_CURRENCIES:
+        raise RuntimeError(f"Unsupported DEFAULT_CURRENCY: {currency}")
+
+
 def create_order(payload: Dict[str, Any]) -> Order:
     validate_order_payload(payload)
+
+    currency = _get_default_currency()
+    _validate_currency(currency)
+
     items = payload['items']
     customer_data = payload.get('customer', {})
 
@@ -63,7 +91,7 @@ def create_order(payload: Dict[str, Any]) -> Order:
 
         pay = payment_provider.charge(
             int(total_amount * 100),
-            'USD',
+            currency,
             payload.get('payment', {}),
             payload.get('idempotency_key', ''),
         )
