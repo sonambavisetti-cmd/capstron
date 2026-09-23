@@ -5,12 +5,10 @@ architecture and implementation plan while keeping the implementation focused on
 core workflows: product catalog, cart/checkout, order persistence, invoice
 metadata, and admin order processing.
 
-VNK-VNK-2-ENH-009: Admin Authorization
-- Admin endpoints are routed via dev.app.api.admin and protected by bearer token.
-
 VNK-VNK-1-ENH-001: Unified storefront entry
 - Canonical storefront entry is FastAPI serving Jinja UI pages + /api/*.
-- GET / returns 200 and renders the storefront homepage template.
+- Server-rendered storefront UI is served at GET / (200 OK).
+- Preserve backward compatible JSON health response at GET /health.
 """
 
 from __future__ import annotations
@@ -141,6 +139,16 @@ def startup_event() -> None:
 
 # UI routes (server-rendered)
 app.include_router(ui_router)
+
+
+@app.get("/health", include_in_schema=False)
+def health() -> Dict[str, object]:
+    return {
+        "company": DEFAULT_SITE_SETTINGS["company_name"],
+        "tagline": DEFAULT_SITE_SETTINGS["tagline"],
+        "status": "ok",
+        "message": "Vinayaka File Works storefront API is running.",
+    }
 
 
 @app.get("/api/site-settings", response_model=schemas.SiteSettingsOut)
@@ -279,7 +287,7 @@ async def payments_webhook(request: Request) -> Dict[str, str]:
     return {"status": "unhandled"}
 
 
-# Admin routes (bearer-token protected; see dev.app.api.admin)
+# Admin routes (existing architecture)
 app.include_router(admin_router)
 
 

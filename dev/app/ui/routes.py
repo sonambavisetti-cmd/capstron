@@ -10,14 +10,19 @@ here.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-templates = Jinja2Templates(directory="dev/templates")
+TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
 router = APIRouter()
 
 
 @router.get("/", response_class=HTMLResponse)
 def storefront_home(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("storefront/home.html", {"request": request})
+    # Starlette's TemplateResponse signature is (request, name, context)
+    return templates.TemplateResponse(request, "storefront/home.html", {})
