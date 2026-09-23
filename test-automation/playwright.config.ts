@@ -4,7 +4,7 @@ const baseURL = process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || 'http
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['**/vnk3-*.spec.ts'],
+  testMatch: ['**/*.spec.ts'],
   timeout: 30 * 1000,
   expect: { timeout: 10000 },
   fullyParallel: true,
@@ -29,7 +29,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'cd .. && set ADMIN_USERNAME=admin && set ADMIN_PASSWORD=adminpass && set APP_ENV=development && python -m uvicorn dev.app.main:app --host 127.0.0.1 --port 8000',
+    command: 'cd .. && set SECRET_KEY=dev-secret && python dev/app.py',
     url: baseURL,
     reuseExistingServer: true,
     timeout: 120 * 1000,
