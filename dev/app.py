@@ -9,6 +9,7 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
+
 @app.route('/')
 def index():
     return render_template_string('''
@@ -249,6 +250,23 @@ def index():
             min-height: 120px;
             resize: vertical;
           }
+
+          /* ENH-001: Inline error styling */
+          .field-error {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #a62b2b;
+            min-height: 1.1em;
+          }
+          .invalid {
+            border-color: rgba(166, 43, 43, 0.65) !important;
+            outline: 2px solid rgba(166, 43, 43, 0.20);
+          }
+          .submit-btn[disabled] {
+            opacity: 0.75;
+            cursor: not-allowed;
+          }
+
           .submit-row {
             margin-top: 20px;
             display: flex;
@@ -394,57 +412,82 @@ def index():
               <div class="form-grid">
                 <div class="field">
                   <label for="name">Name *</label>
-                  <input id="name" name="name" type="text" required placeholder="Enter your full name">
+                  <input id="name" name="name" type="text" required placeholder="Enter your full name" aria-describedby="error-name" aria-invalid="false">
+                  <p class="field-error" id="error-name" role="alert"></p>
                 </div>
                 <div class="field">
                   <label for="company">Company / Organization</label>
-                  <input id="company" name="company" type="text" placeholder="Your organization name">
+                  <input id="company" name="company" type="text" placeholder="Your organization name" aria-describedby="error-company" aria-invalid="false">
+                  <p class="field-error" id="error-company" role="alert"></p>
                 </div>
                 <div class="field">
                   <label for="mobile_number">Mobile Number *</label>
-                  <input id="mobile_number" name="mobile_number" type="tel" required placeholder="+91 98765 43210">
+                  <input id="mobile_number" name="mobile_number" type="tel" required placeholder="9876543210" aria-describedby="error-mobile_number" aria-invalid="false">
+                  <p class="field-error" id="error-mobile_number" role="alert"></p>
                 </div>
                 <div class="field">
-                  <label for="email">Email</label>
-                  <input id="email" name="email" type="email" placeholder="you@example.com">
+                  <label for="email">Email *</label>
+                  <input id="email" name="email" type="email" required placeholder="you@example.com" aria-describedby="error-email" aria-invalid="false">
+                  <p class="field-error" id="error-email" role="alert"></p>
                 </div>
                 <div class="field">
-                  <label for="product_category">Product / Category *</label>
-                  <input id="product_category" name="product_category" type="text" required placeholder="e.g. Office stationery">
+                  <label for="product_category">Product / Category</label>
+                  <input id="product_category" name="product_category" type="text" placeholder="e.g. Office stationery" aria-describedby="error-product_category" aria-invalid="false">
+                  <p class="field-error" id="error-product_category" role="alert"></p>
                 </div>
                 <div class="field">
                   <label for="required_quantity">Required Quantity</label>
-                  <input id="required_quantity" name="required_quantity" type="text" placeholder="e.g. 250 units">
+                  <input id="required_quantity" name="required_quantity" type="text" placeholder="e.g. 250 units" aria-describedby="error-required_quantity" aria-invalid="false">
+                  <p class="field-error" id="error-required_quantity" role="alert"></p>
                 </div>
                 <div class="field" style="grid-column: 1 / -1;">
-                  <label for="customization_requirements">Customization / Requirements</label>
-                  <textarea id="customization_requirements" name="customization_requirements" placeholder="Tell us about your requirements, materials, printing, or sizing preferences."></textarea>
+                  <label for="customization_requirements">Customization / Requirements *</label>
+                  <textarea id="customization_requirements" name="customization_requirements" required placeholder="Tell us about your requirements, materials, printing, or sizing preferences." aria-describedby="error-customization_requirements" aria-invalid="false"></textarea>
+                  <p class="field-error" id="error-customization_requirements" role="alert"></p>
                 </div>
                 <div class="field">
                   <label for="preferred_contact_method">Preferred Contact Method</label>
-                  <select id="preferred_contact_method" name="preferred_contact_method">
+                  <select id="preferred_contact_method" name="preferred_contact_method" aria-describedby="error-preferred_contact_method" aria-invalid="false">
                     <option value="Call">Call</option>
                     <option value="WhatsApp">WhatsApp</option>
                     <option value="Email">Email</option>
                   </select>
+                  <p class="field-error" id="error-preferred_contact_method" role="alert"></p>
                 </div>
                 <div class="field" style="grid-column: 1 / -1;">
                   <label for="additional_message">Additional Message</label>
-                  <textarea id="additional_message" name="additional_message" placeholder="Add any additional details or timelines."></textarea>
+                  <textarea id="additional_message" name="additional_message" placeholder="Add any additional details or timelines." aria-describedby="error-additional_message" aria-invalid="false"></textarea>
+                  <p class="field-error" id="error-additional_message" role="alert"></p>
                 </div>
               </div>
               <div class="submit-row">
-                <button class="submit-btn" type="submit">Send enquiry</button>
+                <button id="quote-submit" class="submit-btn" type="submit">Send enquiry</button>
                 <p id="quote-message" class="form-message" aria-live="polite"></p>
               </div>
             </form>
 
             <script>
-              // VNK-2-ENH-001: submit quote request to backend API.
+              // VNK-VNK-2-ENH-001: Quote form validation & UX.
               (function () {
                 const form = document.getElementById('quote-form-element');
                 const message = document.getElementById('quote-message');
-                if (!form || !message) return;
+                const submitBtn = document.getElementById('quote-submit');
+                if (!form || !message || !submitBtn) return;
+
+                const FIELD_ALIASES = {
+                  phone: 'mobile_number',
+                  mobile: 'mobile_number',
+                  mobileNumber: 'mobile_number',
+                  email_address: 'email',
+                  customization: 'customization_requirements',
+                  requirements: 'customization_requirements',
+                  message: 'customization_requirements'
+                };
+
+                const REQUIRED_FIELDS = ['name', 'mobile_number', 'email', 'customization_requirements'];
+
+                let isSubmitting = false;
+                const originalBtnText = submitBtn.textContent;
 
                 function setMessage(text, kind) {
                   message.textContent = text || '';
@@ -452,11 +495,197 @@ def index():
                   if (kind) message.classList.add(kind);
                 }
 
+                function normalizeFieldKey(key) {
+                  if (!key) return key;
+                  const k = String(key).trim();
+                  return FIELD_ALIASES[k] || k;
+                }
+
+                function getFieldEl(fieldName) {
+                  return form.querySelector(`[name="${CSS.escape(fieldName)}"]`);
+                }
+
+                function getErrorEl(fieldName) {
+                  return document.getElementById(`error-${fieldName}`);
+                }
+
+                function clearFieldError(fieldName) {
+                  const el = getFieldEl(fieldName);
+                  const errEl = getErrorEl(fieldName);
+                  if (errEl) errEl.textContent = '';
+                  if (el) {
+                    el.classList.remove('invalid');
+                    el.setAttribute('aria-invalid', 'false');
+                  }
+                }
+
+                function setFieldError(fieldName, errorText) {
+                  const el = getFieldEl(fieldName);
+                  const errEl = getErrorEl(fieldName);
+                  if (errEl) errEl.textContent = errorText || '';
+                  if (el) {
+                    el.classList.add('invalid');
+                    el.setAttribute('aria-invalid', 'true');
+                  }
+                }
+
+                function validateEmail(value) {
+                  const v = (value || '').trim();
+                  // Basic email validation (intentionally permissive)
+                  return /^\\S+@\\S+\\.\\S+$/.test(v);
+                }
+
+                function validateMobileNumber(value) {
+                  const v = (value || '').trim();
+                  if (!/^\\d+$/.test(v)) return { ok: false, message: 'Mobile number must contain digits only.' };
+                  if (v.length < 10) return { ok: false, message: 'Mobile number must be at least 10 digits.' };
+                  return { ok: true };
+                }
+
+                function validateRequired(value) {
+                  return (value || '').trim().length > 0;
+                }
+
+                function validateForm() {
+                  const errors = {};
+
+                  // Required checks
+                  for (const f of REQUIRED_FIELDS) {
+                    const el = getFieldEl(f);
+                    const val = el ? el.value : '';
+                    if (!validateRequired(val)) {
+                      errors[f] = 'This field is required.';
+                    }
+                  }
+
+                  // Email check (only if not already missing)
+                  if (!errors.email) {
+                    const emailEl = getFieldEl('email');
+                    const email = emailEl ? emailEl.value : '';
+                    if (!validateEmail(email)) {
+                      errors.email = 'Please enter a valid email address.';
+                    }
+                  }
+
+                  // Mobile check (only if not already missing)
+                  if (!errors.mobile_number) {
+                    const phoneEl = getFieldEl('mobile_number');
+                    const phone = phoneEl ? phoneEl.value : '';
+                    const result = validateMobileNumber(phone);
+                    if (!result.ok) errors.mobile_number = result.message;
+                  }
+
+                  return errors;
+                }
+
+                function clearAllErrors() {
+                  const allErrorEls = form.querySelectorAll('.field-error');
+                  allErrorEls.forEach((n) => (n.textContent = ''));
+                  const allControls = form.querySelectorAll('input, textarea, select');
+                  allControls.forEach((el) => {
+                    el.classList.remove('invalid');
+                    el.setAttribute('aria-invalid', 'false');
+                  });
+                }
+
+                function applyErrors(errors) {
+                  if (!errors) return;
+                  for (const [field, text] of Object.entries(errors)) {
+                    setFieldError(field, text);
+                  }
+                }
+
+                function setSubmittingState(submitting) {
+                  isSubmitting = submitting;
+                  submitBtn.disabled = submitting;
+                  submitBtn.textContent = submitting ? 'Submitting…' : originalBtnText;
+                }
+
+                function parseServerErrors(data) {
+                  // Returns: { message?: string, fieldErrors?: { [k: string]: string } }
+                  const result = { message: undefined, fieldErrors: {} };
+                  if (!data || typeof data !== 'object') return result;
+
+                  const msg = data.message || data.error || data.detail;
+                  if (typeof msg === 'string' && msg.trim()) result.message = msg;
+
+                  // shape: errors: { field: message }
+                  if (data.errors && typeof data.errors === 'object' && !Array.isArray(data.errors)) {
+                    for (const [k, v] of Object.entries(data.errors)) {
+                      const field = normalizeFieldKey(k);
+                      const text = Array.isArray(v) ? v.join(', ') : String(v);
+                      if (field) result.fieldErrors[field] = text;
+                    }
+                  }
+
+                  // shape: errors: [{ field, message }]
+                  if (Array.isArray(data.errors)) {
+                    for (const item of data.errors) {
+                      if (!item) continue;
+                      const field = normalizeFieldKey(item.field || item.name || item.key);
+                      const text = item.message || item.error || item.detail;
+                      if (field && text) result.fieldErrors[field] = String(text);
+                    }
+                  }
+
+                  return result;
+                }
+
+                // Live error clearing / validation on blur
+                form.addEventListener('input', function (evt) {
+                  const target = evt.target;
+                  if (!target || !target.name) return;
+                  // Optimistic clear on input; full validation happens on submit/blur
+                  clearFieldError(target.name);
+                });
+
+                form.addEventListener('blur', function (evt) {
+                  const target = evt.target;
+                  if (!target || !target.name) return;
+
+                  const name = target.name;
+                  const val = target.value;
+
+                  // Only validate required fields on blur
+                  if (REQUIRED_FIELDS.includes(name) && !validateRequired(val)) {
+                    setFieldError(name, 'This field is required.');
+                    return;
+                  }
+
+                  if (name === 'email' && validateRequired(val) && !validateEmail(val)) {
+                    setFieldError(name, 'Please enter a valid email address.');
+                    return;
+                  }
+
+                  if (name === 'mobile_number' && validateRequired(val)) {
+                    const result = validateMobileNumber(val);
+                    if (!result.ok) {
+                      setFieldError(name, result.message);
+                      return;
+                    }
+                  }
+
+                  clearFieldError(name);
+                }, true);
+
                 form.addEventListener('submit', async function (evt) {
                   evt.preventDefault();
-                  setMessage('Sending...', '');
+                  if (isSubmitting) return;
+
+                  setMessage('', '');
+                  clearAllErrors();
+
+                  const errors = validateForm();
+                  if (Object.keys(errors).length > 0) {
+                    applyErrors(errors);
+                    setMessage('Please correct the highlighted fields and try again.', 'error');
+                    return;
+                  }
 
                   try {
+                    setSubmittingState(true);
+                    setMessage('Sending…', '');
+
                     const formData = new FormData(form);
                     const payload = {};
                     for (const [k, v] of formData.entries()) payload[k] = v;
@@ -469,14 +698,23 @@ def index():
 
                     const data = await resp.json().catch(() => ({}));
                     if (!resp.ok) {
-                      setMessage(data.error || 'Unable to submit request. Please try again.', 'error');
+                      const parsed = parseServerErrors(data);
+                      if (parsed.fieldErrors && Object.keys(parsed.fieldErrors).length > 0) {
+                        applyErrors(parsed.fieldErrors);
+                      }
+                      setMessage(
+                        parsed.message || data.error || 'Unable to submit request. Please try again.',
+                        'error'
+                      );
                       return;
                     }
 
                     setMessage('Thank you! Your enquiry has been submitted.', 'success');
-                    form.reset();
+                    // ENH-001 approved behavior: keep values (no reset).
                   } catch (e) {
                     setMessage('Unable to submit request. Please try again.', 'error');
+                  } finally {
+                    setSubmittingState(false);
                   }
                 });
               })();
@@ -490,6 +728,7 @@ def index():
       </body>
     </html>
     ''')
+
 
 # Register API blueprints if available (register individually so one failing import doesn't disable others)
 for _mod in ['products', 'cart', 'orders', 'admin', 'invoices', 'quote_requests']:
@@ -516,6 +755,7 @@ for _mod in ['products', 'cart', 'orders', 'admin', 'invoices', 'quote_requests'
             app.logger.warning(f"Could not import dev.api.{_mod}: {e}")
         except Exception:
             pass
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
