@@ -1,181 +1,158 @@
-# Implementation Plan — VNK-119 — Checkout Form HTML5 Validation (ENH-001)
+# Implementation Plan — VNK-123 — Storefront UI: unify homepage/entrypoint (FastAPI)
 
 ## Objective
-Implement **checkout form UX/validation improvements** for the Storefront MVP so customers enter correct contact/address details the first time.
+Deliver a **single, consistent storefront entry experience** by consolidating the current dual UI entrypoints:
+- FastAPI UI router currently redirects `/` → `/products`
+- Legacy Flask entrypoint (`dev/app.py`) also defines `/` with a separate marketing/quote landing page
 
-Specifically (per approved enhancement **VNK-VNK-1-ENH-001**):
-- Add **HTML5 input types/constraints** (email/tel, patterns, min/max lengths, required flags)
-- Add **inline validation message placeholders** (using browser-native validation UI plus template-level hints)
-- **Preserve submitted values** on validation failure (server-side re-render with prior values)
+The goal is to make **FastAPI the canonical UI entrypoint** and ensure `/` deterministically serves that experience.
 
 ## Scope (validated)
-### In scope (APPROVE SELECTED)
-Only the following approved enhancement is in scope:
-- **VNK-VNK-1-ENH-001** — Checkout UX / Validation
+### Approval status
+**APPROVE SELECTED**
 
-Includes:
-- Checkout template updates (`dev/templates/storefront/checkout.html`)
-- Checkout submit flow updates to support re-rendering with values/errors (`dev/app/ui/routes.py`)
-- Minimal server-side validation for required fields (to ensure value preservation is exercised even if browser-side validation is bypassed)
-- Tests to cover the validation behavior and value preservation
+### In scope
+Only the explicitly approved enhancement is in scope:
+- **VNK-VNK-1-ENH-001** — UI Entry / Navigation: consolidate dual UI entrypoints into a single, consistent storefront entry (prefer FastAPI)
 
 ### Out of scope
-- **ENH-002** generic error page replacement with inline banner for API failures (explicitly excluded by prior decision)
-- Transport detail capture, GST/tax UI, payment method selection, invoice links, search/filter, cart UX changes
-- Database/API contract changes (unless required to support validation error handling; not expected for ENH-001)
+- Checkout validation/UX, cart UX, invoice download UX, transport-mode conditional fields, accessibility polish (these are separate enhancements from the gap analysis and are not approved in this scope).
+- Creating new quote/contact UI flows (beyond navigation/link placeholders).
 
-## Requirement traceability (preserve chain)
+## Requirement traceability
 Approved Enhancement → Jira Requirement → Implementation Task → Component → Test Impact
 
-| Approved Enhancement | Jira Epic | Jira Requirement | Jira Task | Implementation Task (this plan) | Component(s) | Test Impact |
+| Approved Enhancement | Jira Epic | Jira Requirement (Story) | Jira Task(s) | Implementation Task(s) (this plan) | Component(s) | Test Impact |
 |---|---|---|---|---|---|---|
-| VNK-VNK-1-ENH-001 | VNK-118 | VNK-119 | VNK-120 | Add HTML5 field types/constraints + inline help text blocks | `dev/templates/storefront/checkout.html` | Template render test; UI automation: browser blocks invalid input |
-| VNK-VNK-1-ENH-001 | VNK-118 | VNK-119 | VNK-121 | Preserve submitted values when server-side validation fails (re-render checkout with values + errors) | `dev/app/ui/routes.py`, `dev/templates/storefront/checkout.html` | Unit/integration test: POST checkout invalid → 200 with preserved values |
+| VNK-VNK-1-ENH-001 | VNK-122 | VNK-123 | VNK-124 | Implement FastAPI home/landing page route + template; update `/` behavior to serve it | `dev/app/ui/routes.py`, `dev/templates/storefront/*` | Add/adjust tests for GET `/` and navigation to `/products` |
+| VNK-VNK-1-ENH-001 | VNK-122 | VNK-123 | VNK-125 | Deprecate or clearly separate legacy Flask `/` landing page | `dev/app.py` | Add/adjust tests (if any) to ensure Flask root no longer conflicts; documentation checks |
 
 ## Existing architecture (relevant)
-- UI is server-rendered via **FastAPI APIRouter**: `dev/app/ui/routes.py`
-- Templates via **Jinja2**: `templates = Jinja2Templates(directory="dev/templates")`
-- Checkout page and submit endpoints:
-  - `GET /checkout` → renders `dev/templates/storefront/checkout.html`
-  - `POST /checkout` → builds order payload and calls `_client(request).create_order(payload)`
+- **Primary app**: FastAPI monolith serving server-rendered storefront pages + JSON APIs.
+  - UI router: `dev/app/ui/routes.py`
+  - Templates: `dev/templates/storefront/*.html`
+  - Static: mounted under `/static` in `dev/app/main.py`
+- **Legacy/alternate entrypoint**: Flask app in `dev/app.py`.
+  - Defines `/` with inline HTML including a “View all →” placeholder link.
+  - Posts quote-enquiry data to `/api/quote-enquiries`.
+- Current conflict: Two different “home” experiences depending on which server entrypoint is used.
+
+## Canonical behavior decision (planning assumption)
+Because explicit answers to earlier clarifications are not present in the approval message, this plan assumes the simplest, consistent UX:
+- **FastAPI serves the canonical storefront homepage at `/`** (HTTP 200, no redirect).
+- **FastAPI provides a real landing page template** (“Home”) with clear navigation to `/products`.
+- **Flask root (`/`) is deprecated** and should no longer present the storefront/landing UX.
+
+If product owner prefers `/` → `/home` redirect instead, implementation can be trivially adjusted (route + redirect), but this plan targets `/` = home page for deterministic entry.
 
 ## Affected components
-### Frontend (templates)
-- `dev/templates/storefront/checkout.html`
+### Backend (routing)
+- `dev/app/ui/routes.py`
+  - Replace or modify existing `GET /` behavior (currently redirects to `/products`).
+  - Add any additional home routes if needed (e.g., `/home` as alias).
+- `dev/app/main.py`
+  - Ensure router registration order remains correct (verify UI router mounts before other catchalls, if any).
+- `dev/app.py` (Flask)
+  - Deprecate/relocate the legacy landing page.
 
-### Backend (UI router)
-- `dev/app/ui/routes.py`:
-  - `checkout_page()` (GET)
-  - `checkout_submit()` (POST)
+### Frontend (templates/static)
+- New or updated template(s) under `dev/templates/storefront/`:
+  - `home.html` (new) OR reuse existing layout and create a minimal “home” page.
+  - Update navigation links in shared layout if present (`layout.html`).
 
-### Tests
-- Add/adjust pytest tests under `dev/tests/` (existing suite present)
-- Optional: update Playwright specs under `test-automation/` if present (not required to satisfy ENH-001, but recommended)
+### Docs (optional but recommended)
+- `README.md` and/or `QUICK_START.md` to clarify which entrypoint to use for the storefront.
 
-## Frontend changes (server-rendered checkout)
-### 1) Add HTML5 input types/constraints
-Update inputs in `checkout.html`:
-- **Full name**
-  - `required`
-  - `minlength` (e.g., 2)
-  - `maxlength` (e.g., 100)
-  - `autocomplete="name"`
-- **Phone**
-  - `type="tel"`
-  - `inputmode="tel"`
-  - `autocomplete="tel"`
-  - pattern for India-friendly digits (example): `pattern="[0-9+\-() ]{7,15}"`
-  - `minlength`/`maxlength` aligned with pattern intent
-  - keep optional (per current behavior) unless product owner wants it required
-- **Email**
-  - `type="email"`
-  - `autocomplete="email"`
-  - optional
-- **Address line 1 / City / State / Postal code / Country**
-  - Ensure `required` stays on required fields
-  - Add `minlength`/`maxlength`
-  - Postal code:
-    - `inputmode="numeric"`
-    - `pattern="[0-9]{6}"` (India PIN)
-    - `maxlength="6"`
+## Frontend changes (FastAPI server-rendered)
+### Home page template (new)
+Create `dev/templates/storefront/home.html`:
+- Extends existing `layout.html`.
+- Minimal content:
+  - Store name / short description
+  - Primary CTA button/link: **“Browse products” → `/products`**
+  - Optional secondary CTA: “Contact / Quote” (link target depends on existing UI; if none exists, link can be omitted or point to a placeholder route that returns a friendly message).
 
-### 2) Inline validation messages / hints
-Because browser-native validation messaging is user-agent controlled, add lightweight inline hints:
-- Add `<small class="hint">…</small>` under phone/email/pincode fields.
-- Add a template block for server-side errors:
-  - A top-level summary (existing `{% if error %}` block can be reused)
-  - Field-level error placeholders if implementing structured errors (recommended)
+### Navigation consistency
+- If `layout.html` contains a top nav, ensure there is a “Home” link to `/` and “Products” link to `/products`.
 
-### 3) Preserve submitted values on re-render
-Modify `checkout.html` inputs to use Jinja values:
-- `value="{{ form.full_name | default('') }}"`
-- For text inputs; for `<select>`, mark selected option based on `form.transport_mode`.
+## Backend changes
+### 1) FastAPI `GET /` should render the home page
+In `dev/app/ui/routes.py`:
+- Change existing root handler from redirect to `TemplateResponse("storefront/home.html", ...)`.
+- Provide standard context used by other templates (e.g., `request`).
 
-## Backend changes (UI router)
-### 1) Add a simple form model for templating
-In `dev/app/ui/routes.py`, introduce a small internal dict (no new module required in planning, but recommended structure):
-- `form_data = {"full_name": ..., "phone": ..., "email": ..., ...}`
-- `form_errors = {"full_name": "...", "postal_code": "..."}`
+Optional compatibility:
+- Provide `GET /home` as an alias redirecting to `/` or rendering the same template (only if beneficial; keep minimal).
 
-### 2) Server-side validation (minimal)
-Add validation in `checkout_submit()` before calling API:
-- Required fields: `full_name`, `address_line1`, `city`, `state`, `postal_code`, `transport_mode`
-- Email: if provided, basic format check (or rely on Pydantic/email-validator only if already present). Keep minimal.
-- Phone: if provided, validate against same regex as template pattern (keep in one place to avoid drift).
-- Postal code: validate 6 digits.
+### 2) Legacy Flask entrypoint behavior
+In `dev/app.py`, ensure `/` no longer competes as a primary storefront landing experience.
+Implementation options (pick one during implementation; this plan prefers Option A):
+- **Option A (preferred):** Keep Flask app but change `/` to return a plain deprecation message with link to `/products` (served by FastAPI when using the FastAPI app), or a 410 Gone.
+- Option B: Move the old landing page to `/legacy` (or `/quote`) and make `/` redirect to `/products`.
 
-If validation fails:
-- Re-price cart via `_client(request).price_cart(items)` so summary remains visible
-- Return `TemplateResponse("storefront/checkout.html", {..., "form": form_data, "errors": form_errors})`
-- HTTP 200 (or 422) — choose 200 for simplicity with SSR
+Because Flask and FastAPI are separate entrypoints, this is mostly to avoid developer confusion and to prevent “wrong server started” scenarios.
 
-> Note: This is not ENH-002; this is only for **form validation failures prior to API call**.
-
-### 3) GET /checkout populates empty form defaults
-Update `checkout_page()` to provide:
-- `form` defaults: `{"country": "IN"}`
-- `errors`: `{}`
+### 3) Remove placeholder link(s)
+If any legacy HTML remains accessible (Flask `/legacy`), replace placeholder anchors (e.g., `href="#"`) with real storefront routes where appropriate.
 
 ## API changes
-None expected.
-- `POST /checkout` continues to call existing `_client(request).create_order(payload)`.
-- No change to API payload schema is required for ENH-001.
+None.
+- This enhancement is purely UI entry/navigation and template rendering.
 
 ## Database changes
 None.
 
 ## Test impact
-### Pytest (recommended minimal coverage)
-Add tests validating:
-1. `GET /checkout` renders and includes HTML5 attributes (smoke assertion on `type="email"`, `type="tel"`, `pattern=` for pin)
-2. `POST /checkout` with invalid postal code (e.g., `123`) re-renders checkout (status 200) and preserves previously entered values
-3. `POST /checkout` with invalid email (e.g., `abc`) re-renders with error and preserved values
+### Unit/integration tests (pytest)
+Add/adjust tests under `dev/tests/`:
+1. **FastAPI home route**
+   - `GET /` returns 200.
+   - Response contains expected CTA/link to `/products`.
+2. **Existing products route still accessible**
+   - `GET /products` returns 200.
 
-Implementation approach:
-- Use FastAPI `TestClient` against app entry (whichever is used by existing tests). If a UI router is mounted, call `/checkout`.
-- Mock `_client(request).create_order` to ensure it is **not called** on validation error.
+If an existing test suite uses a specific `app` factory, follow that established pattern.
 
-### Playwright (optional)
-- Verify browser blocks invalid email/phone/pincode client-side.
+### UI automation (Playwright) — optional
+If `test-automation/` includes Playwright or similar:
+- Add a smoke test: open `/`, click “Browse products”, verify navigation to `/products`.
 
-## Implementation tasks
-### Jira VNK-120 — Update checkout template
-1. Add `form` + `errors` template variables support
-2. Add HTML5 input types and attributes:
-   - email/tel/numeric patterns
-   - minlength/maxlength
-   - autocomplete/inputmode
-3. Add inline hints for phone/email/pincode
-4. Ensure transport mode retains selected option on re-render
+## Implementation tasks (breakdown)
+### VNK-124 — Implement FastAPI home/landing page route + template
+1. Inspect existing UI router (`dev/app/ui/routes.py`) and template structure.
+2. Create `dev/templates/storefront/home.html` extending `layout.html`.
+3. Update `GET /` route to render `home.html` (remove redirect to `/products`).
+4. Update shared navigation in `layout.html` if needed.
+5. Add/adjust pytest tests covering `/`.
 
-### Jira VNK-121 — Preserve values on validation failure
-1. Implement server-side validation helpers (prefer pure functions inside `routes.py` to avoid new modules)
-2. On validation failure:
-   - compute `summary` (if items present)
-   - return checkout template with populated `form` and `errors`
-3. Ensure existing successful submission path is unchanged
+### VNK-125 — Deprecate or clearly separate legacy Flask '/' landing page
+1. Update `dev/app.py`:
+   - Replace inline HTML landing page at `/` with a deprecation response (410 or simple message) OR move it to `/legacy`.
+2. Ensure any remaining links (e.g., “View all”) point to real routes.
+3. Update documentation to clarify FastAPI entrypoint is canonical for storefront.
 
 ## Dependencies
-- None new expected.
-- If robust email validation is required beyond a simple regex, confirm whether `email-validator` is already available via Pydantic extras; otherwise keep minimal.
+- Agreement on the canonical root behavior:
+  - `/` renders home (assumed), OR `/` redirects to `/home`.
+- Agreement on Flask handling:
+  - Deprecate `/`, or relocate to `/legacy`.
 
 ## Risks & mitigations
-- **Duplication of validation rules** (template vs server): Keep regex/pattern constants in one place (server), and inject pattern strings into template context.
-- **Breaking existing template expectations**: Ensure `checkout.html` works whether `form`/`errors` provided or not using `default()`.
-- **Cart pricing API failure during re-render**: If `_client.price_cart` fails, render checkout with `summary=None` and an error banner while still preserving fields.
+- **Breaking deep links/bookmarks**: Previously `/` redirected to `/products`. Mitigation: home page contains a prominent “Browse products” CTA; optionally keep a short redirect route `/start` → `/products` if needed (not required).
+- **Developer confusion about which server to run**: Mitigation: update README/QUICK_START with explicit command and expected root route.
+- **Template/layout coupling**: Ensure `home.html` reuses existing layout and styles to avoid drift.
 
 ## Implementation sequence
-1. Update `checkout_page()` context to include `form` and `errors`.
-2. Update `checkout.html` to bind values and add HTML5 constraints.
-3. Add server-side validation in `checkout_submit()` and re-render on failure.
-4. Add/update pytest tests for validation + value preservation.
+1. Confirm existing UI router registration and template base (`layout.html`).
+2. Implement `home.html`.
+3. Change FastAPI `GET /` to render `home.html`.
+4. Update or deprecate Flask `/` behavior.
+5. Add/adjust tests.
+6. Update docs (optional but recommended).
 
 ## Definition of Done
-- `dev/templates/storefront/checkout.html` uses HTML5 types/constraints for email/phone/postal code and includes user hints.
-- Validation failures re-render checkout with:
-  - visible error message(s)
-  - previously entered values preserved
-  - transport mode selection preserved
-- Happy path checkout continues to create order and redirect to confirmation.
-- Automated tests added/updated and passing.
-- Only planning artifact changed/committed: `dev/impl-plan.md`.
+- FastAPI serves **`GET /`** as the canonical storefront homepage (HTTP 200) using a Jinja2 template.
+- Homepage provides a functional navigation link/CTA to `/products`.
+- Legacy Flask `/` no longer presents a conflicting storefront landing experience (deprecated/relocated).
+- Automated tests updated/added for `/` behavior.
+- Only planning artifact committed in this step: `dev/impl-plan.md`.
