@@ -1,305 +1,242 @@
-# Implementation Plan — VNK-2-ENH-001 (Admin Quote/Enquiry UX & workflow)
+# Implementation Plan — VNK-126 / VNK-127 / VNK-128 / VNK-129 (VNK-VNK-2-ENH-001)
 
 ## Objective
-Deliver an admin-triage workflow for Quote Enquiries by adding **admin-protected APIs** to list enquiries, view details, and update status + follow-up notes, with database support for notes and status constraints.
+Improve the **Landing Page Quote Enquiry form** UX by adding:
+- **Client-side validation** (required fields + basic email + digit-only phone)
+- **Inline, field-level error messages**
+- **Submit-in-progress state** (disable button + progress label to prevent duplicates)
+- **Clear server error feedback** (general error + map field errors when provided)
 
-> Human-approved scope: **VNK-2-ENH-001 only**.
+This plan is implementation-ready and limited to the **approved enhancement** below.
 
 ---
 
 ## Scope
-### Approved Enhancement
-- **VNK-2-ENH-001 — Quote/Enquiry UX & workflow (Admin tracking + status + notes)**
+### In scope (APPROVE SELECTED)
+- **Approved Enhancement:** `VNK-VNK-2-ENH-001` — UI / Quote form validation & UX
+- **Jira Epic:** VNK-126 — Improve Quote Enquiry Form Validation & UX
+- **Jira Stories:**
+  - VNK-127 — Inline validation on the quote enquiry form
+  - VNK-128 — Prevent duplicate submits + progress state
+  - VNK-129 — Clear server error feedback when submission fails
+- **Jira Tasks:**
+  - VNK-130 — Update landing page quote form markup to support inline errors
+  - VNK-131 — Implement client-side quote form validation logic
+  - VNK-132 — Implement submit-in-progress state (disable + progress label)
+  - VNK-133 — Handle server-side validation errors (map to fields where possible)
 
-### Jira Requirements in Scope
-- **Epic (existing)**: VNK-39 — Quote enquiries (end-to-end API wiring & persistence)
-- **Stories**:
-  - VNK-88 — Admin list enquiries
-  - VNK-89 — Admin enquiry detail
-  - VNK-90 — Admin update status/notes
-- **Supporting Tasks (Jira hierarchy note: unparented due to config)**:
-  - VNK-82 — Define admin enquiry workflow (statuses + allowed transitions)
-  - VNK-83 — Implement admin API: list quote enquiries (pagination + sort)
-  - VNK-84 — Implement admin API: get quote enquiry details by id
-  - VNK-85 — Implement admin API: update quote enquiry status and follow-up notes
-  - VNK-86 — Add QuoteEnquiry follow-up note field and status constraints (DB + migration)
-  - VNK-87 — Protect admin enquiry endpoints with admin authentication/authorization
+### Out of scope
+- Product browsing UI, mobile menu/accessibility work, quote endpoint naming standardization (other enhancements)
+- Any new admin UI or workflow
+- Backend validation changes unless required to support better error messages (see Backend Changes)
 
-### Explicitly Out of Scope
-- Any enhancements other than VNK-2-ENH-001
-- A full admin UI (HTML pages) **unless confirmed** (see Clarifications)
+---
+
+## Scope Validation (approved assumptions)
+Per user direction, proceed with the following assumptions:
+- **Quote form fields (assumed current landing page fields):**
+  - `name`
+  - `mobile_number` (phone)
+  - `email`
+  - `message` (requirements/details)
+- **Phone validation rule:** digit-only; reject if contains non-digits; require minimum length **10** digits.
+- **Post-success behavior:** keep field values as-is; show success message (do not reset the form).
+
+If the actual `dev/app.py` markup differs (field names/ids), align implementation to the real fields while keeping the same validation intent.
 
 ---
 
 ## Requirement Traceability
 
-| Enhancement | Jira Requirement | Acceptance Criteria (summary) | Component | Implementation Task | Test Impact |
-|---|---|---|---|---|---|
-| VNK-2-ENH-001 | VNK-88 (Story) | Admin can list enquiries with pagination, newest-first, and key triage fields; invalid paging → 400; unauth → 401/403 | `dev/api/admin.py` (new routes) + `dev/models.py` + `dev/db.py` | **T1** Add admin list endpoint `GET /api/admin/quote-enquiries` with `page`, `page_size`, `sort` | Update/add pytest API tests for pagination, ordering, auth |
-| VNK-2-ENH-001 | VNK-89 (Story) | Admin can fetch full enquiry details; missing id → 404; unauth → 401/403 | `dev/api/admin.py` + `dev/models.py` | **T2** Add admin detail endpoint `GET /api/admin/quote-enquiries/<id>` | Add pytest tests for 200/404 and auth |
-| VNK-2-ENH-001 | VNK-90 (Story) | Admin can update status to allowed value and persist notes; invalid status → 400; missing id → 404; unauth → 401/403 | `dev/api/admin.py` + `dev/models.py` + Alembic migration | **T3** Add update endpoint `PATCH /api/admin/quote-enquiries/<id>` (status + follow_up_notes) | Add pytest tests for valid/invalid updates, clearing notes behavior |
-| VNK-2-ENH-001 | VNK-86 (Task) | Follow-up notes are persisted; status constraints enforced (chosen behavior documented) | `dev/models.py` + `alembic/versions/*` | **T4** Add DB fields/constraints + migration | Migration test coverage (apply migrations in CI if present) |
-| VNK-2-ENH-001 | VNK-87 (Task) | Admin endpoints are protected | `dev/api/admin.py` + auth helper | **T5** Implement admin auth mechanism for these endpoints | Add pytest for 401/403 paths |
-| VNK-2-ENH-001 | VNK-82 (Task) | Status set + transitions defined | `dev/validation.py` (or new helper module) + docs | **T0** Decide status vocabulary & transition policy | Tests for validation + transition enforcement |
+| Approved Enhancement | Jira Requirement | Implementation Task(s) | Component(s) | Test Impact |
+|---|---|---|---|---|
+| VNK-VNK-2-ENH-001 | VNK-127 (Story) inline validation + field errors | VNK-130, VNK-131 | `dev/app.py` (landing page HTML/JS) | Add/update Playwright tests for inline validation; unit-style JS tests are not present today |
+| VNK-VNK-2-ENH-001 | VNK-128 (Story) prevent duplicate submits | VNK-132 | `dev/app.py` (landing page JS/CSS) | Playwright: verify button disabled + label change during request |
+| VNK-VNK-2-ENH-001 | VNK-129 (Story) clear server errors | VNK-133 | `dev/app.py` (landing page JS) and possibly `dev/api/quote_requests.py` (optional) | Playwright/API tests for failure cases and error rendering |
 
-Traceability chain example:
+Traceability chain:
 
 ```text
-VNK-2-ENH-001
+VNK-VNK-2-ENH-001
   ↓
-VNK-88
+Epic VNK-126
   ↓
-T1 Implement admin list enquiries endpoint
-  ↓
-Blueprint: dev/api/admin.py + Model: dev/models.py
-  ↓
-Pytest API tests (pagination/order/auth)
+Story VNK-127 → Tasks VNK-130, VNK-131 → dev/app.py (form markup + JS validation) → Playwright tests
+Story VNK-128 → Task VNK-132 → dev/app.py (submit state) → Playwright tests
+Story VNK-129 → Task VNK-133 → dev/app.py (server error mapping) (+ optional API tweaks) → Playwright/API tests
 ```
 
 ---
 
-## Existing Architecture (Repository Findings)
-
-### Application type
-- Single **Flask** application located under `dev/`
-- SQLAlchemy models in `dev/models.py`
-- DB setup in `dev/db.py` with `SessionLocal`, `engine`, and `Base`
-- Alembic present (`alembic/`, `alembic.ini`) and imports `dev.models.Base.metadata`
-
-### Existing Quote Enquiry endpoints
-- Public endpoints exist in `dev/api/quote_requests.py`:
-  - `POST /api/quote-enquiries` creates an enquiry
-  - `GET /api/quote-enquiries` lists enquiries (currently **not admin-protected**, no pagination)
-
-### Existing admin auth (partial)
-- `dev/api/admin.py` includes `POST /api/admin/login` that verifies username/password against `AdminUser`
-- No session/token issuance is present in current code; login returns `admin_id` only
-
-### Tests
-- Existing test module `dev/tests/test_quote_enquiries.py` covers:
-  - create quote enquiry
-  - list quote enquiries (public)
+## Existing Architecture (relevant)
+- Single Flask app under `dev/`.
+- Landing page rendered inline via `render_template_string(...)` in `dev/app.py` at route `/`.
+- Quote submission currently performed by in-page JS `fetch(...)` to `POST /api/quote-enquiries`.
+- Quote API implemented in `dev/api/quote_requests.py` and persisted via `QuoteEnquiry` model in `dev/models.py`.
 
 ---
 
-## Component Impact
+## Affected Components
+### Frontend (server-rendered landing page)
+- `dev/app.py`
+  - Quote form markup (add inline error containers, consistent IDs/names)
+  - Quote form JS submit handler (validation, submit state, error mapping)
+  - Minimal CSS adjustments (error styles, disabled button)
 
-### Frontend
-- None required for API-only implementation.
-- Optional (pending confirmation): add a minimal admin page for triage.
+### Backend (optional, only if needed for clearer errors)
+- `dev/api/quote_requests.py`
+  - If current API returns only generic errors, optionally standardize error JSON shape to support field mapping.
 
-### Backend / API
-- Add admin routes to `dev/api/admin.py` for enquiry list/detail/update.
-- Reuse `QuoteEnquiry` model and `SessionLocal`.
-- Add validation for paging params and status updates.
+### Test automation
+- `test-automation/` Playwright tests (exact path to be confirmed in repo)
+- Possibly `dev/tests/` API tests if server error shapes are adjusted
 
-### Database
-- Extend `quote_enquiries` table for follow-up notes and status constraints.
+---
 
-### Authentication/Authorization
-- Implement a mechanism to authorize admin-only routes (see options in Backend Changes).
+## Frontend Changes (detailed)
 
-### Configuration
-- Potentially add a config value for admin auth strategy (if token-based).
+### 1) Form markup updates (VNK-130)
+In `dev/app.py` within the quote form HTML:
+- Ensure each input/textarea has:
+  - Stable `id` and `name` matching the JSON payload keys (`name`, `mobile_number`, `email`, `message`).
+  - `aria-invalid="true|false"` toggled by JS.
+  - `aria-describedby` referencing an inline error element.
+- Add an inline error container per field, e.g.:
+  - `<div class="field-error" id="error-name" role="alert"></div>`
+  - `<div class="field-error" id="error-mobile_number" role="alert"></div>`
+  - `<div class="field-error" id="error-email" role="alert"></div>`
+  - `<div class="field-error" id="error-message" role="alert"></div>`
+- Add a general form message container (already exists) and ensure it supports:
+  - success (green)
+  - error (red)
 
-### Documentation
-- Update README or `dev/README.md` with admin endpoints and example requests.
+### 2) Client-side validation rules (VNK-131)
+Implement a small validation module (inline JS functions in `dev/app.py`):
+- `validateRequired(value)` for all fields.
+- `validateEmail(value)`:
+  - basic pattern (e.g., `/^\S+@\S+\.\S+$/`) OR use `type="email"` + JS check.
+- `validatePhoneDigits(value)`:
+  - digits-only: `/^\d+$/`
+  - length >= 10.
+
+Validation behavior:
+- On submit: validate all fields; show inline errors; prevent submit if any errors.
+- On input/blur: clear field error when valid; optionally validate on blur for immediate feedback.
+
+### 3) Submit-in-progress state (VNK-132)
+During the async `fetch` call:
+- Disable submit button.
+- Change button label to “Submitting…” (or similar).
+- Prevent multiple submissions:
+  - ignore subsequent submits while `isSubmitting === true`.
+- Always restore state in `finally` block:
+  - re-enable button
+  - restore original label
+
+### 4) Server error handling + mapping (VNK-133)
+When the server responds with non-2xx:
+- Prefer to parse JSON error response.
+- Support the following response shapes (be tolerant):
+  1. `{ "message": "..." }`
+  2. `{ "error": "..." }`
+  3. `{ "errors": { "field": "message", "field2": "message" }, "message": "..." }`
+  4. `{ "errors": [{"field":"email","message":"Invalid"}] }`
+
+Mapping strategy:
+- If field errors are present, display them inline for matching field keys.
+- Otherwise show a general error message.
+- Keep existing values (no reset) even on success; on success show a success message.
+
+---
+
+## Backend / API Changes
+
+### Default approach (no backend changes)
+- Implement client-side validation and resilient error parsing without requiring API changes.
+
+### Optional improvement (only if quick + low risk)
+If `dev/api/quote_requests.py` currently returns plain text or inconsistent errors, standardize failure responses to:
+
+```json
+{ "message": "Validation failed", "errors": { "email": "Invalid email" } }
+```
+
+This is optional and should be done only if it does not expand scope beyond VNK-VNK-2-ENH-001.
 
 ---
 
 ## Database Changes
-
-Planned changes to `quote_enquiries`:
-- Add `follow_up_notes` **TEXT NULL**
-- Add/adjust `status` constraints:
-  - Option A (recommended): `CHECK (status in (...))`
-  - Option B: application-level validation only (if DB portability concerns)
-
-Also consider:
-- Add index for `created_at` if pagination needs it (SQLite won’t use it much, but Postgres will)
-
-Alembic:
-- Create new migration under `alembic/versions/` reflecting the above.
-
----
-
-## API Changes
-
-### New/Modified Admin Endpoints
-All endpoints require admin auth.
-
-1) **List enquiries**
-- `GET /api/admin/quote-enquiries`
-- Query params:
-  - `page` (int, default 1, must be >= 1)
-  - `page_size` (int, default 20, must be >= 1, max capped e.g. 100)
-  - `sort` (optional; default `created_at_desc`)
-- Response (proposed):
-
-```json
-{
-  "items": [{"id": "...", "created_at": "...", "name": "...", "mobile_number": "...", "email": "...", "status": "..."}],
-  "page": 1,
-  "page_size": 20,
-  "total": 123
-}
-```
-
-2) **Get enquiry detail**
-- `GET /api/admin/quote-enquiries/<id>`
-- Response: full enquiry details including message/requirements and `follow_up_notes`.
-
-3) **Update enquiry**
-- `PATCH /api/admin/quote-enquiries/<id>`
-- Body:
-
-```json
-{ "status": "IN_PROGRESS", "follow_up_notes": "Called customer..." }
-```
-
-- Validation:
-  - invalid status → 400
-  - missing id → 404
-  - `follow_up_notes`: decide behavior for empty string (clear vs reject) — see Clarifications
-
-### Existing Public Endpoints
-- `GET /api/quote-enquiries` currently exists and is unauthenticated.
-- No change required for this enhancement, but risk: admin list endpoint should not conflict with existing route.
-
----
-
-## Frontend Changes
-
-No frontend changes required (API-only scope).
-
-If admin UI is required, it should be a follow-up story and would likely live under Flask templates (e.g., `dev/templates/`) with a simple table and detail view calling the admin APIs.
-
----
-
-## Backend Changes
-
-### Admin authorization approach (needs decision)
-Current repo has `POST /api/admin/login` returning `{admin_id}` only. Options:
-
-1) **Lightweight header-based admin id** (fastest, but weaker security):
-- Client calls login and then sends `X-Admin-Id: <id>` header.
-- Server verifies that admin id exists.
-
-2) **Token-based** (recommended):
-- On login, issue a signed token (e.g., itsdangerous / Flask session signed cookie) and require it on subsequent admin calls.
-
-This plan assumes **token-based** if feasible with current dependencies; otherwise fall back to header-based for MVP.
-
-### Validation
-- Add a central validator for:
-  - list paging params
-  - status values
-  - (optional) transition constraints
-
-### Model updates
-- Extend `QuoteEnquiry` with `follow_up_notes` column.
-- Add constants/enums (Python-level) for allowed statuses.
+- None.
 
 ---
 
 ## Test Impact
 
-### Existing tests to update
-- `dev/tests/test_quote_enquiries.py` may remain (public endpoints).
+### Playwright (UI) tests (preferred)
+Add/update tests to cover:
+1. **Required validation**: submit empty form → inline errors shown for each required field.
+2. **Phone validation**: enter non-digit phone or <10 digits → phone field error shown.
+3. **Email validation**: invalid email → email field error shown.
+4. **Submit progress**: during submission, button is disabled and label changes; after completion it re-enables.
+5. **Server error rendering**: simulate server error (route interception/mocking or point to test API) and verify general error message and/or field mapping.
+6. **Success**: success message shown and values remain.
 
-### New tests to add
-- `dev/tests/test_admin_quote_enquiries.py` (recommended) to cover:
-  - list requires auth (401/403)
-  - list pagination and ordering
-  - detail 200/404
-  - update 200/400/404
-  - status validation
-  - notes update and notes clearing behavior
-
-### Regression areas
-- Ensure no breakage to existing `quote_requests` endpoints.
-- Ensure `Base.metadata.create_all()` usage doesn’t conflict with migrations; avoid relying on it for production.
+### API tests (only if backend error format changes)
+- Update/add pytest tests to assert consistent error JSON.
 
 ---
 
-## Implementation Tasks
+## Implementation Tasks (mapped to Jira)
 
-### T0 — Status workflow definition (VNK-82)
-- **Description**: Finalize allowed status vocabulary and whether transitions are constrained.
-- **Component/files**: `dev/validation.py` (or new `dev/app/` equivalent validator module), docs in this plan.
-- **Dependency**: Human confirmation.
-- **Outcome**: Documented status list and transition policy used by validation + DB check (if used).
+### VNK-130 — Update landing page quote form markup
+- Update HTML structure to include per-field error elements + ARIA attributes.
+- Add CSS for `.field-error` and invalid field styles.
 
-### T1 — Admin list enquiries endpoint (VNK-83, supports VNK-88)
-- **Description**: Implement `GET /api/admin/quote-enquiries` with pagination + sort.
-- **Component/files**: `dev/api/admin.py`
-- **Dependency**: T5 (auth helper) should be in place first.
-- **Outcome**: Paginated response with total and items.
+### VNK-131 — Implement client-side validation logic
+- Add JS functions to validate required/email/phone.
+- Add event listeners for `submit`, and optionally `blur/input` for live feedback.
+- Ensure errors clear when corrected.
 
-### T2 — Admin enquiry detail endpoint (VNK-84, supports VNK-89)
-- **Description**: Implement `GET /api/admin/quote-enquiries/<id>`.
-- **Component/files**: `dev/api/admin.py`
-- **Dependency**: T5.
-- **Outcome**: 200 with full details; 404 when not found.
+### VNK-132 — Implement submit-in-progress state
+- Introduce `isSubmitting` guard.
+- Disable/enable button and update label around `fetch`.
 
-### T3 — Admin update status/notes endpoint (VNK-85, supports VNK-90)
-- **Description**: Implement `PATCH /api/admin/quote-enquiries/<id>`.
-- **Component/files**: `dev/api/admin.py` + `dev/validation.py`
-- **Dependency**: T0, T4, T5.
-- **Outcome**: Status/notes updates validated and persisted.
-
-### T4 — DB migration + model update (VNK-86)
-- **Description**: Add `follow_up_notes` column and status constraint strategy.
-- **Component/files**: `dev/models.py`, `alembic/versions/<new>.py`
-- **Dependency**: T0.
-- **Outcome**: Migration applies cleanly; model reflects schema.
-
-### T5 — Protect admin enquiry endpoints (VNK-87)
-- **Description**: Implement an admin auth decorator/helper and apply it to the new enquiry routes.
-- **Component/files**: `dev/api/admin.py` (and possibly new `dev/api/auth_helpers.py`)
-- **Dependency**: None.
-- **Outcome**: Unauthenticated calls return 401/403 consistently.
-
-### T6 — Documentation updates
-- **Description**: Document endpoints, auth method, and example curl requests.
-- **Component/files**: `README.md` or `dev/README.md` (TBD)
-- **Dependency**: T1–T5.
-- **Outcome**: Clear operator/dev documentation.
+### VNK-133 — Handle server-side validation errors
+- Parse non-2xx responses.
+- Map server-provided field errors to inline errors.
+- Provide fallback general error.
 
 ---
 
 ## Dependencies
-- Human confirmation of:
-  - status vocabulary + transition policy
-  - follow_up_notes empty string behavior (clear vs reject)
-  - whether admin UI is required or API-only is sufficient
-- Alembic configured and usable in target deployment pipeline.
+- Confirm actual form field IDs/names in `dev/app.py` (planned work aligns to current markup).
+- Confirm Playwright is used and runnable under `test-automation/` in this repo.
 
 ---
 
-## Risks
-- **Auth design gap**: current login endpoint doesn’t establish an authenticated session/token.
-- **Confusion between public vs admin listing**: both exist; ensure naming and access are clear.
-- **SQLite vs Postgres differences**: CHECK constraints and migrations behave differently across DBs.
-- **Base.metadata.create_all()** in blueprints can mask missing migrations in dev; ensure production path uses Alembic.
+## Risks / Mitigations
+- **Field name mismatch** (UI keys vs API keys): mitigate by aligning `name` attributes and JSON payload keys to backend expectations.
+- **Inconsistent backend errors**: mitigate by tolerant parsing; optional backend standardization if needed.
+- **Inline HTML in `dev/app.py`** can get large/unwieldy: keep changes minimal; no refactor into templates in this scope.
 
 ---
 
-## Implementation Sequence (Recommended)
-1. T0 — Confirm status vocabulary & transitions
-2. T5 — Implement admin auth mechanism/decorator
-3. T4 — Add model + migration for follow_up_notes/status constraints
-4. T1 — Add admin list API (pagination + ordering)
-5. T2 — Add admin detail API
-6. T3 — Add admin update API
-7. Add/Update tests
-8. T6 — Documentation updates
+## Implementation Sequence
+1. Inspect existing quote form markup + JS in `dev/app.py` and align assumed field list.
+2. Implement VNK-130 markup changes + basic CSS.
+3. Implement VNK-131 client validation + inline errors.
+4. Implement VNK-132 submit-in-progress state.
+5. Implement VNK-133 server error parsing/mapping.
+6. Add/update Playwright tests.
+7. Run tests locally (Playwright + pytest if applicable).
 
 ---
 
 ## Definition of Done
-- `dev/api/admin.py` provides admin-protected endpoints for list/detail/update of quote enquiries per AC.
-- `quote_enquiries` schema includes follow-up notes and chosen status constraint behavior.
-- All new/updated pytest tests pass locally and in CI.
-- Documentation updated with endpoint specs and auth usage.
-- PR contains **plan only** (this document) until human approval for Design/Development.
+- Quote form prevents invalid submissions with clear inline messages.
+- Phone accepts **digits only** and requires **>=10** digits.
+- Submit button disables and shows progress during request; duplicate submits prevented.
+- Server failures show clear general error and map field errors where available.
+- On success, form values remain and a success message is shown.
+- All relevant automated tests pass.
+- Only planning artifacts committed to `feature/VNK-126`.
