@@ -9,6 +9,7 @@ _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
+
 @app.route('/')
 def index():
     return render_template_string('''
@@ -28,6 +29,7 @@ def index():
             --muted: #6a5a50;
             --text: #2a1b17;
             --line: #e8ddcf;
+            --danger: #b42318;
           }
           * { box-sizing: border-box; }
           body {
@@ -249,6 +251,16 @@ def index():
             min-height: 120px;
             resize: vertical;
           }
+          .field-error {
+            min-height: 1.1em;
+            color: var(--danger);
+            font-size: 0.9rem;
+            margin-top: 2px;
+          }
+          .input-error {
+            border-color: var(--danger) !important;
+            outline-color: var(--danger) !important;
+          }
           .submit-row {
             margin-top: 20px;
             display: flex;
@@ -395,30 +407,37 @@ def index():
                 <div class="field">
                   <label for="name">Name *</label>
                   <input id="name" name="name" type="text" required placeholder="Enter your full name">
+                  <div class="field-error" id="err-name"></div>
                 </div>
                 <div class="field">
                   <label for="company">Company / Organization</label>
                   <input id="company" name="company" type="text" placeholder="Your organization name">
+                  <div class="field-error" id="err-company"></div>
                 </div>
                 <div class="field">
                   <label for="mobile_number">Mobile Number *</label>
                   <input id="mobile_number" name="mobile_number" type="tel" required placeholder="+91 98765 43210">
+                  <div class="field-error" id="err-mobile_number"></div>
                 </div>
                 <div class="field">
                   <label for="email">Email</label>
                   <input id="email" name="email" type="email" placeholder="you@example.com">
+                  <div class="field-error" id="err-email"></div>
                 </div>
                 <div class="field">
                   <label for="product_category">Product / Category *</label>
                   <input id="product_category" name="product_category" type="text" required placeholder="e.g. Office stationery">
+                  <div class="field-error" id="err-product_category"></div>
                 </div>
                 <div class="field">
                   <label for="required_quantity">Required Quantity</label>
                   <input id="required_quantity" name="required_quantity" type="text" placeholder="e.g. 250 units">
+                  <div class="field-error" id="err-required_quantity"></div>
                 </div>
                 <div class="field" style="grid-column: 1 / -1;">
                   <label for="customization_requirements">Customization / Requirements</label>
                   <textarea id="customization_requirements" name="customization_requirements" placeholder="Tell us about your requirements, materials, printing, or sizing preferences."></textarea>
+                  <div class="field-error" id="err-customization_requirements"></div>
                 </div>
                 <div class="field">
                   <label for="preferred_contact_method">Preferred Contact Method</label>
@@ -427,10 +446,12 @@ def index():
                     <option value="WhatsApp">WhatsApp</option>
                     <option value="Email">Email</option>
                   </select>
+                  <div class="field-error" id="err-preferred_contact_method"></div>
                 </div>
                 <div class="field" style="grid-column: 1 / -1;">
                   <label for="additional_message">Additional Message</label>
                   <textarea id="additional_message" name="additional_message" placeholder="Add any additional details or timelines."></textarea>
+                  <div class="field-error" id="err-additional_message"></div>
                 </div>
               </div>
               <div class="submit-row">
@@ -440,11 +461,15 @@ def index():
             </form>
 
             <script>
-              // VNK-2-ENH-001: submit quote request to backend API.
+              // VNK-VNK-2-ENH-001: client-side validation + inline errors for quote form.
               (function () {
                 const form = document.getElementById('quote-form-element');
                 const message = document.getElementById('quote-message');
                 if (!form || !message) return;
+
+                const PHONE_MIN_LEN = 10;
+                const PHONE_MAX_LEN = 15;
+                const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
                 function setMessage(text, kind) {
                   message.textContent = text || '';
@@ -452,8 +477,127 @@ def index():
                   if (kind) message.classList.add(kind);
                 }
 
+                function fieldEl(fieldId) {
+                  return document.getElementById(fieldId);
+                }
+
+                function errEl(fieldId) {
+                  return document.getElementById('err-' + fieldId);
+                }
+
+                function setFieldError(fieldId, msg) {
+                  const el = fieldEl(fieldId);
+                  const er = errEl(fieldId);
+                  if (er) er.textContent = msg || '';
+                  if (el) el.classList.add('input-error');
+                }
+
+                function clearFieldError(fieldId) {
+                  const el = fieldEl(fieldId);
+                  const er = errEl(fieldId);
+                  if (er) er.textContent = '';
+                  if (el) el.classList.remove('input-error');
+                }
+
+                function clearAllErrors() {
+                  const ids = [
+                    'name',
+                    'company',
+                    'mobile_number',
+                    'email',
+                    'product_category',
+                    'required_quantity',
+                    'customization_requirements',
+                    'preferred_contact_method',
+                    'additional_message'
+                  ];
+                  ids.forEach(clearFieldError);
+                }
+
+                function normalizePhone(value) {
+                  return (value || '').replace(/[\s-]/g, '').trim();
+                }
+
+                function validateRequired(fieldId, label) {
+                  const el = fieldEl(fieldId);
+                  const val = (el && el.value ? el.value : '').trim();
+                  if (!val) {
+                    setFieldError(fieldId, (label || 'This field') + ' is required.');
+                    return false;
+                  }
+                  return true;
+                }
+
+                function validateEmail(fieldId) {
+                  const el = fieldEl(fieldId);
+                  const raw = (el && el.value ? el.value : '').trim();
+                  if (!raw) return true; // optional
+                  if (!EMAIL_RE.test(raw)) {
+                    setFieldError(fieldId, 'Please enter a valid email address.');
+                    return false;
+                  }
+                  return true;
+                }
+
+                function validatePhone(fieldId) {
+                  const el = fieldEl(fieldId);
+                  const raw = (el && el.value ? el.value : '').trim();
+                  const normalized = normalizePhone(raw);
+                  if (!normalized) {
+                    setFieldError(fieldId, 'Mobile number is required.');
+                    return false;
+                  }
+                  if (!/^\d+$/.test(normalized)) {
+                    setFieldError(fieldId, 'Mobile number must contain digits only.');
+                    return false;
+                  }
+                  if (normalized.length < PHONE_MIN_LEN || normalized.length > PHONE_MAX_LEN) {
+                    setFieldError(fieldId, `Mobile number must be ${PHONE_MIN_LEN}–${PHONE_MAX_LEN} digits.`);
+                    return false;
+                  }
+                  return true;
+                }
+
+                function validateForm() {
+                  clearAllErrors();
+
+                  const invalidIds = [];
+
+                  if (!validateRequired('name', 'Name')) invalidIds.push('name');
+                  if (!validatePhone('mobile_number')) invalidIds.push('mobile_number');
+                  if (!validateEmail('email')) invalidIds.push('email');
+                  if (!validateRequired('product_category', 'Product / Category')) invalidIds.push('product_category');
+
+                  return {
+                    ok: invalidIds.length === 0,
+                    firstInvalid: invalidIds.length ? invalidIds[0] : null
+                  };
+                }
+
+                // Clear error when user edits a field.
+                form.addEventListener('input', function (evt) {
+                  const t = evt.target;
+                  if (!t || !t.id) return;
+                  clearFieldError(t.id);
+                });
+
+                form.addEventListener('change', function (evt) {
+                  const t = evt.target;
+                  if (!t || !t.id) return;
+                  clearFieldError(t.id);
+                });
+
                 form.addEventListener('submit', async function (evt) {
                   evt.preventDefault();
+
+                  const res = validateForm();
+                  if (!res.ok) {
+                    setMessage('Please fix the highlighted fields and try again.', 'error');
+                    const first = res.firstInvalid ? fieldEl(res.firstInvalid) : null;
+                    if (first && typeof first.focus === 'function') first.focus();
+                    return; // IMPORTANT: do not send request
+                  }
+
                   setMessage('Sending...', '');
 
                   try {
@@ -475,6 +619,7 @@ def index():
 
                     setMessage('Thank you! Your enquiry has been submitted.', 'success');
                     form.reset();
+                    clearAllErrors();
                   } catch (e) {
                     setMessage('Unable to submit request. Please try again.', 'error');
                   }
@@ -490,6 +635,7 @@ def index():
       </body>
     </html>
     ''')
+
 
 # Register API blueprints if available (register individually so one failing import doesn't disable others)
 for _mod in ['products', 'cart', 'orders', 'admin', 'invoices', 'quote_requests']:
@@ -516,6 +662,7 @@ for _mod in ['products', 'cart', 'orders', 'admin', 'invoices', 'quote_requests'
             app.logger.warning(f"Could not import dev.api.{_mod}: {e}")
         except Exception:
             pass
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
