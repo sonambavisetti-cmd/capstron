@@ -1,14 +1,12 @@
-from flask import Flask, jsonify, render_template_string
+"""Legacy Flask entrypoint (deprecated).
 
-app = Flask(__name__)
+VNK-VNK-1-ENH-001
+This repository previously had two competing storefront "home" experiences:
+- FastAPI monolith (canonical) running on :8000
+- Flask app (legacy) running on :5000
 
-# Ensure repo root is on sys.path when running the script directly (e.g., python dev/app.py)
-# This helps importing dev.* packages when Python sets sys.path[0] to the script directory.
-import os, sys
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _root not in sys.path:
-    sys.path.insert(0, _root)
-
+To avoid end-user confusion and enforce a single canonical storefront entry,
+Flask GET / redirects users to the FastAPI storefront UI.
 
 @app.route('/')
 def index():
@@ -314,89 +312,18 @@ def index():
             <a class="nav-btn" href="#quote-form">Get a quote</a>
           </header>
 
-          <section class="hero">
-            <div>
-              <span class="eyebrow">Paper & printing solutions</span>
-              <h1>Print smarter. Deliver better.</h1>
-              <p class="lead">
-                Vinayaka File Works helps businesses and families with custom stationery,
-                packaging, printing, and office essentials—delivered with reliable service and quick turnaround.
-              </p>
-              <div class="cta-row">
-                <a class="primary" href="#products">Shop products</a>
-                <a class="secondary" href="#services">Explore services</a>
-              </div>
-              <div class="chips" style="margin-top: 18px;">
-                <span class="chip">No. 42, Market Road, Bengaluru, Karnataka 560001</span>
-                <span class="chip">+91 98765 43210</span>
-              </div>
-              <div class="chips">
-                <span class="chip">Bulk printing</span>
-                <span class="chip">Office supplies</span>
-                <span class="chip">Custom stationery</span>
-              </div>
-            </div>
+Safety:
+- If STOREFRONT_BASE_URL is unset/invalid, default to localhost.
+- Always redirect to <base>/storefront/.
+"""
 
-            <div class="hero-card">
-              <div class="product-box">
-                <div class="product-image"></div>
-                <div class="product-meta">
-                  <strong>Premium Office Pack</strong>
-                  <div class="price-row">
-                    <span>Starter bundle</span>
-                    <strong>₹1,499</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
+from __future__ import annotations
 
-          <section class="section" id="products">
-            <div class="section-header">
-              <h2>Popular products</h2>
-              <a href="#">View all →</a>
-            </div>
-            <div class="grid">
-              <div class="card">
-                <div class="mini"></div>
-                <h3>Printed Forms</h3>
-                <p>Custom invoice books, registers, and office forms designed to keep daily operations efficient.</p>
-              </div>
-              <div class="card">
-                <div class="mini"></div>
-                <h3>Packaging Kits</h3>
-                <p>Professional packaging and business stationery for retail, gifting, and courier-ready deliveries.</p>
-              </div>
-              <div class="card">
-                <div class="mini"></div>
-                <h3>Files & Folders</h3>
-                <p>Durable file folders, project tags, and archival materials built for everyday use.</p>
-              </div>
-            </div>
-          </section>
+import os
+import sys
+from urllib.parse import urlparse
 
-          <section class="section" id="services">
-            <div class="section-header">
-              <h2>Why customers choose us</h2>
-            </div>
-            <div class="grid">
-              <div class="card">
-                <div class="mini"></div>
-                <h3>Fast turnaround</h3>
-                <p>Quick production timelines for urgent print jobs and repeat office supply orders.</p>
-              </div>
-              <div class="card">
-                <div class="mini"></div>
-                <h3>Quality assurance</h3>
-                <p>Careful print checks, premium paper selection, and a focus on clean finishing details.</p>
-              </div>
-              <div class="card">
-                <div class="mini"></div>
-                <h3>Flexible support</h3>
-                <p>Support for local businesses, schools, shops, and event organizers with tailored order planning.</p>
-              </div>
-            </div>
-          </section>
+from flask import Flask, redirect
 
           <section class="section" id="quote-form">
             <div class="section-header">
@@ -600,22 +527,13 @@ def index():
 
                   setMessage('Sending...', '');
 
-                  try {
-                    const formData = new FormData(form);
-                    const payload = {};
-                    for (const [k, v] of formData.entries()) payload[k] = v;
+    parsed = urlparse(base)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        # Fall back to safe local default.
+        base = "http://localhost:8000"
 
-                    const resp = await fetch('/api/quote-enquiries', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(payload)
-                    });
+    return base.rstrip("/") + "/storefront/"
 
-                    const data = await resp.json().catch(() => ({}));
-                    if (!resp.ok) {
-                      setMessage(data.error || 'Unable to submit request. Please try again.', 'error');
-                      return;
-                    }
 
                     setMessage('Thank you! Your enquiry has been submitted.', 'success');
                     form.reset();
@@ -628,41 +546,30 @@ def index():
             </script>
           </section>
 
-          <footer id="contact">
-            Vinayaka File Works • Office stationery, printing, and business essentials
-          </footer>
-        </div>
-      </body>
-    </html>
-    ''')
 
 
 # Register API blueprints if available (register individually so one failing import doesn't disable others)
-for _mod in ['products', 'cart', 'orders', 'admin', 'invoices', 'quote_requests']:
+for _mod in ["products", "cart", "orders", "admin", "invoices", "quote_requests"]:
     try:
-        if _mod == 'products':
+        if _mod == "products":
             from dev.api.products import products_bp as bp
-        elif _mod == 'cart':
+        elif _mod == "cart":
             from dev.api.cart import cart_bp as bp
-        elif _mod == 'orders':
+        elif _mod == "orders":
             from dev.api.orders import orders_bp as bp
-        elif _mod == 'admin':
+        elif _mod == "admin":
             from dev.api.admin import admin_bp as bp
-        elif _mod == 'invoices':
+        elif _mod == "invoices":
             from dev.api.invoices import invoices_bp as bp
-        elif _mod == 'quote_requests':
+        elif _mod == "quote_requests":
             from dev.api.quote_requests import quote_bp as bp
         else:
             bp = None
+
         if bp is not None:
             app.register_blueprint(bp)
-    except Exception as e:
-        # Log and continue; tests may run in environments where DB/backends are missing
-        try:
-            app.logger.warning(f"Could not import dev.api.{_mod}: {e}")
-        except Exception:
-            pass
-
+    except Exception:
+        pass
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
