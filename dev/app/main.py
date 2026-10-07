@@ -5,8 +5,10 @@ architecture and implementation plan while keeping the implementation focused on
 core workflows: product catalog, cart/checkout, order persistence, invoice
 metadata, and admin order processing.
 
-VNK-VNK-2-ENH-009: Admin Authorization
-- Admin endpoints are routed via dev.app.api.admin and protected by bearer token.
+VNK-VNK-1-ENH-001: Unified storefront entry
+- Canonical storefront entry is FastAPI serving Jinja UI pages + /api/*.
+- Server-rendered storefront UI is served at GET / (200 OK).
+- Preserve backward compatible JSON health response at GET /health.
 """
 
 from __future__ import annotations
@@ -22,10 +24,11 @@ from sqlalchemy.orm import Session
 
 from dev.app import db as app_db
 from dev.app import schemas
-from dev.app.auth import hash_password
 from dev.app.api.admin import router as admin_router
+from dev.app.auth import hash_password
 from dev.app.models import AdminUser, Invoice, Order, Product
 from dev.app.services import order_service, payment_adapter
+from dev.app.ui.routes import router as ui_router
 
 app = FastAPI(title="Vinayaka File Works", version="0.1.0")
 logger = logging.getLogger(__name__)
@@ -134,8 +137,12 @@ def startup_event() -> None:
     initialize_app_state()
 
 
-@app.get("/")
-def home() -> Dict[str, object]:
+# UI routes (server-rendered)
+app.include_router(ui_router)
+
+
+@app.get("/health", include_in_schema=False)
+def health() -> Dict[str, object]:
     return {
         "company": DEFAULT_SITE_SETTINGS["company_name"],
         "tagline": DEFAULT_SITE_SETTINGS["tagline"],
@@ -280,7 +287,7 @@ async def payments_webhook(request: Request) -> Dict[str, str]:
     return {"status": "unhandled"}
 
 
-# Admin routes (bearer-token protected; see dev.app.api.admin)
+# Admin routes (existing architecture)
 app.include_router(admin_router)
 
 

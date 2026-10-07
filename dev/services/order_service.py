@@ -4,12 +4,14 @@ from typing import Any, Dict
 from dev.db import SessionLocal
 from dev.models import Customer, Invoice, Order, OrderItem, Product
 from dev.payments.mock import MockPayment
+from dev.services.currency import get_order_currency
 from dev.validation import validate_order_payload
 
 payment_provider = MockPayment()
 
 
 def create_order(payload: Dict[str, Any]) -> Order:
+    currency = get_order_currency()
     validate_order_payload(payload)
     items = payload['items']
     customer_data = payload.get('customer', {})
@@ -63,7 +65,7 @@ def create_order(payload: Dict[str, Any]) -> Order:
 
         pay = payment_provider.charge(
             int(total_amount * 100),
-            'USD',
+            currency,
             payload.get('payment', {}),
             payload.get('idempotency_key', ''),
         )

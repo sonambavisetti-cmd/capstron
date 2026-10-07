@@ -179,6 +179,7 @@ If no browser test framework exists, add **minimal JS-unit-like coverage** is no
 ---
 
 ## Dependencies
+
 - Confirm existing form field names/ids in `dev/app.py` to correctly map validation and inline errors.
 - Test tooling availability:
   - If Playwright exists in `test-automation/`, use it.
@@ -199,6 +200,29 @@ If no browser test framework exists, add **minimal JS-unit-like coverage** is no
 3. P3: Add validation helpers
 4. P4: Integrate into submit handler + ensure no fetch on invalid
 5. P5: Add automation tests (or manual checklist)
+- **Alembic drift risk:** Because `0001_initial.py` is empty, DB schema may be created via `Base.metadata.create_all()` in runtime modules. This can cause inconsistent environments across dev/test.
+  - Mitigation: keep cart migration self-contained and ensure tests use migrated schema.
+
+- **Backward compatibility risk:** Existing cart clients may rely on old response shape (currently returns raw dict).
+  - Mitigation: preserve routes and provide response compatibility layer or documented breaking change with versioning (prefer compatibility).
+
+- **Concurrency risk:** DB-backed cart reduces multi-worker issues, but concurrent updates can still race.
+  - Mitigation: use unique constraints + retry on integrity errors; keep operations transactional.
+
+- **Blueprint registration import errors:** The current blueprint registration loop catches exceptions; adding quote import must follow the same pattern.
+  - Mitigation: minimal change; add coverage test that app starts and route exists.
+
+---
+
+## Implementation Sequence (Recommended)
+1. **T1** baseline verification (DB + migrations + tests).
+2. **T2** register quote blueprint.
+3. **T3** quote persistence/validation checks.
+4. **T4** add cart models + constraints.
+5. **T5** create Alembic migration for cart.
+6. **T6** implement DB-backed cart endpoints.
+7. **T7** add/update tests.
+8. **T8** docs update.
 
 ---
 

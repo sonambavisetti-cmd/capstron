@@ -1,13 +1,20 @@
 from flask import Blueprint, jsonify, request
+from dev.services.currency import CurrencyConfigError
 from dev.services.order_service import create_order
 
 orders_bp = Blueprint('orders', __name__)
+
+# Single place to change the status for an unsupported currency configuration.
+CURRENCY_CONFIG_ERROR_STATUS = 500
 
 @orders_bp.route('/api/orders', methods=['POST'])
 def post_order():
     payload = request.json or {}
     try:
         order = create_order(payload)
+    except CurrencyConfigError:
+        # Detail is logged server-side in get_order_currency(); never echo the value.
+        return jsonify({'error': 'unsupported currency configuration'}), CURRENCY_CONFIG_ERROR_STATUS
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     return jsonify({'status': 'created', 'order_id': order.id}), 201
