@@ -1,0 +1,12 @@
+
+> test
+> playwright test --workers=1
+
+[WebServer] C:\Users\SonamBavisetti\Desktop\Capstone\capstron\dev\app.py:472: SyntaxWarning: "\s" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\s"? A raw string is also an option.
+[WebServer]   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+[WebServer] Traceback (most recent call last):
+[WebServer]   File "C:\Users\SonamBavisetti\Desktop\Capstone\capstron\dev\app.py", line 1, in <module>
+[WebServer]     from flask import Flask, jsonify, render_template_string
+[WebServer] ModuleNotFoundError: No module named 'flask'
+Error: Process from config.webServer was not able to start. Exit code: 1
+

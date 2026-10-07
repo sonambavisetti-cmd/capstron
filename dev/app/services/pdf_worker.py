@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from dev.app.db import SessionLocal
 from dev.app.models import Invoice, Order
+from dev.services.currency import INVOICE_CURRENCY_LABEL
 
 STORAGE_PATH = os.getenv("STORAGE_PATH", "./storage")
 
@@ -56,13 +57,14 @@ def generate_invoice_pdf(invoice_id: str, db: Optional[Session] = None) -> Optio
         c.drawString(40, 768, f"Order Ref: {order.id}")
         c.drawString(40, 754, f"Customer: {order.customer.full_name if order.customer else 'Walk-in Customer'}")
         c.drawString(40, 740, f"Date: {datetime.utcnow().strftime('%Y-%m-%d')} ")
+        c.drawString(40, 726, f"Currency: {INVOICE_CURRENCY_LABEL}")
 
         y = 700
         c.setFont("Helvetica-Bold", 12)
         c.drawString(40, y, "Item")
         c.drawString(320, y, "Qty")
-        c.drawString(420, y, "Unit")
-        c.drawString(520, y, "Total")
+        c.drawString(420, y, f"Unit ({INVOICE_CURRENCY_LABEL})")
+        c.drawString(520, y, f"Total ({INVOICE_CURRENCY_LABEL})")
         c.setFont("Helvetica", 11)
         y -= 18
 
@@ -70,14 +72,14 @@ def generate_invoice_pdf(invoice_id: str, db: Optional[Session] = None) -> Optio
             product_name = item.product.name if item.product else "Product"
             c.drawString(40, y, product_name[:36])
             c.drawString(330, y, str(item.quantity))
-            c.drawString(420, y, f"₹{float(item.unit_price):.2f}")
-            c.drawString(520, y, f"₹{float(item.line_total):.2f}")
+            c.drawString(420, y, f"INR {float(item.unit_price):.2f}")
+            c.drawString(520, y, f"INR {float(item.line_total):.2f}")
             y -= 18
 
         c.drawString(40, max(120, y - 20), "Subtotal")
-        c.drawString(520, max(120, y - 20), f"₹{float(order.subtotal):.2f}")
+        c.drawString(520, max(120, y - 20), f"INR {float(order.subtotal):.2f}")
         c.drawString(40, max(100, y - 38), "Total")
-        c.drawString(520, max(100, y - 38), f"₹{float(order.total_amount):.2f}")
+        c.drawString(520, max(100, y - 38), f"INR {float(order.total_amount):.2f}")
         c.setFont("Helvetica-Oblique", 10)
         c.drawString(40, 52, "Thank you for shopping with Vinayaka File Works")
         c.showPage()

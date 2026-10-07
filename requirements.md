@@ -1,99 +1,90 @@
-# Requirements
+# Requirements - VNK-98: INR currency alignment for payments and invoices
 
-## Short summary
-Build a customer-facing website for "Vinayaka File Works" that presents company information and branding, shows a product catalog, supports adding items to a cart and placing orders (Cash on Delivery or Online payment), and generates downloadable PDF invoices matching the provided sample bill layout. Source: user-story.md in repository (VNK-1). Attempted live Jira REST API returned 404; content used is the local user-story.md export.
+Source: user-story.md (Jira VNK-98, parent VNK-10, enhancement ID VNK-VNK-3-ENH-002). Items not in the story are marked `Not Specified`. Code observations are context only and are not requirements.
 
 ## Problem Statement
-Customers of Vinayaka File Works need a simple, trustworthy storefront where they can browse available products, view prices and availability, place orders using Cash on Delivery or an online payment option, and download a PDF invoice that matches the supplied bill layout. The business needs to receive, view, and mark orders as processed without exposing secrets in the repository.
+The payment charge is sent with currency "USD" while the invoice shows the rupee symbol, so currency handling is inconsistent end to end. This risks accounting and payment inconsistencies and shows customers the wrong currency. The story asks to standardize on INR: charge in INR and use INR consistently in order and invoice formatting.
+
+### Current-state observations (from code, informational)
+- `dev/services/order_service.py` calls `payment_provider.charge(int(total_amount * 100), 'USD', ...)`. The amount is passed in minor units (x100) and the currency is hardcoded.
+- The payment contract (`dev/payments/interface.py`, `PaymentProvider.charge(amount_cents, currency, source, idempotency_key)`) takes `amount_cents`. The only implementation is `dev/payments/mock.py`, which always succeeds.
+- Invoice PDFs (`dev/services/invoice.py`, `dev/app/services/pdf_worker.py`) hardcode the "₹" prefix. `dev/templates/invoice_template.html` has no currency symbol or code.
+- `dev/app/services/order_service.py` does not call a payment adapter. `dev/app/services/payment_adapter.py` already defaults `currency="INR"` for `create_session`. The story names only `dev/services/order_service.py`, so whether the second path is in scope is unclear (see OQ-08).
+- `dev/validation.py` has no currency check, and no currency configuration setting was found.
+- The success path in `dev/services/order_service.py` sets `order_status='PROCESSING'` and `payment_status='SUCCESS'`. It does not set "PAID".
 
 ## Stakeholders
-| Role | Responsibility |
-|------|---------------|
-| Customer | Browse products, add items to cart, place orders, and download invoices |
-| Business owner / staff | Provide product data, review incoming orders, and fulfil customer orders |
-| Admin user | Review and update order status (mark processed) and access order records |
-| Developer | Implement storefront, checkout flow, invoice generation, and admin capabilities |
-| Payment provider (if used) | Process online payments in a secure and testable manner |
+| Stakeholder | Interest |
+|---|---|
+| Customer | Pays in, and receives an invoice showing, the correct currency (INR) |
+| Admin / accounting | Reconciles payments against orders and invoices with consistent currency |
+| Reporter: SONAM BAVISETTI | Story owner |
+| Assignee | Not Specified (Unassigned) |
+| Parent VNK-10 owner | Not Specified |
 
 ## Functional Requirements
-| ID | Description | Priority |
-|----|-------------|----------|
-| FR-01 | Homepage displays the company name "Vinayaka File Works", logo, full postal address, and contact number. | High |
-| FR-02 | Product listing page shows products with name, SKU, image (if available), unit price, and available quantity. | High |
-| FR-03 | Customer can add products to a cart and review items (quantities and pricing) before checkout. | High |
-| FR-04 | Checkout captures customer contact and delivery information and allows selection of Cash on Delivery or Online payment. | High |
-| FR-05 | System validates required inputs (customer details, delivery address, payment selection) and surfaces clear error messages for invalid or missing fields. | High |
-| FR-06 | On successful order submission the system persists the order and shows a confirmation to the customer including an order reference. | High |
-| FR-07 | System generates a downloadable PDF invoice matching the supplied sample bill fields: invoice number, date, customer details, itemized list, totals, and company details. | High |
-| FR-08 | Admin interface or a protected admin endpoint allows viewing submitted orders and marking them as processed. | Medium |
-| FR-09 | Repository and codebase do not contain secrets (API keys); configuration is provided through environment variables. | High |
+- **FR-01**: When the system sends a charge request to the payment adapter for an order, the currency passed must be "INR".
+- **FR-02**: The charged amount must equal the order total, expressed in minor units where applicable under the existing adapter contract.
+- **FR-03**: The generated invoice must show INR-consistent currency: the symbol "₹" and/or the code "INR".
+- **FR-04**: No part of the generated invoice may show "USD".
+- **FR-05**: Order creation must be unaffected on the success path. When payment succeeds, the order status remains "PAID" (or the existing success status) and invoice generation completes successfully.
+- **FR-06**: If the application is misconfigured with an unsupported currency code and an order is submitted, the API must respond with a validation/config error.
+- **FR-07**: In the FR-06 case, no order is created.
+- **FR-08**: In the FR-06 case, inventory is not decremented.
+- **FR-09**: Order and invoice formatting must use INR consistently (from the proposed improvement). The specific order surfaces are Not Specified (see OQ-07).
 
-## Non-Functional Requirements (Success Metrics)
-| ID | Description | Metric |
-|----|-------------|--------|
-| NFR-01 | Responsive user interface for desktop and mobile use. | Pages render and remain usable at common mobile/desktop breakpoints (manual UAT). |
-| NFR-02 | PDF invoice layout consistency with the provided sample. | Invoice contains required fields and visually follows sample layout (manual verification). |
-| NFR-03 | Basic input validation and access control for admin functions. | Validation prevents common injection/invalid input; admin pages require authentication. |
-| NFR-04 | Product listing performance under typical load. | Typical product listing requests respond in under 500 ms (measured in dev/staging). |
-| NFR-05 | No credentials stored in repository. | CI or local runs must succeed using environment variables; scans show no secrets. |
+## Non-Functional Requirements
+- **NFR-01 (Consistency)**: Currency must be consistent across the payment charge, order, and invoice. No mixed USD/INR representation.
+- **NFR-02 (Backward compatibility)**: There must be no regression in existing order creation and invoice generation behavior (FR-05).
+- **NFR-03 (Data integrity)**: A currency misconfiguration must not leave partial state (no order record, no inventory change).
+- **NFR-04 (Testability)**: Each BDD scenario must be verifiable with automated tests, including the currency value received by the adapter.
+- NFR for performance, security, audit/logging, and localization: Not Specified.
 
 ## Acceptance Criteria
-### FR-01: Homepage displays company information
-- Given a customer opens the website homepage
-- When the page loads
-- Then the company name "Vinayaka File Works", logo, full postal address, and contact number are visible.
+Taken from the story (BDD).
 
-### FR-02: Product catalog is shown to customers
-- Given a customer visits the product listing page
-- When the page loads
-- Then each product displays: name, SKU, image (or placeholder), unit price, and available quantity.
+**AC-1 Charge uses INR** (FR-01, FR-02)
+- Given an order is submitted with valid items and totals
+- When the system sends the charge request to the payment adapter
+- Then the currency passed to the adapter is "INR"
+- And the charged amount equals the order total in minor units if applicable (per existing adapter contract)
 
-### FR-03: Customer can add items to cart
-- Given a customer is viewing products
-- When they add one or more products to the cart and view the cart
-- Then the cart shows the selected products with correct quantities, unit prices, and a subtotal.
+**AC-2 Invoice displays INR consistently** (FR-03, FR-04)
+- Given an order is successfully created and an invoice PDF is generated
+- When the invoice is rendered
+- Then the currency symbol and/or code shown is INR-consistent (₹ and/or "INR")
+- And no part of the invoice shows "USD"
 
-### FR-04: Customer can checkout and choose payment method
-- Given a customer has items in the cart
-- When they submit contact and delivery details and choose either Cash on Delivery or Online payment
-- Then the system accepts the order if inputs are valid and returns an order reference; if payment is selected and succeeds, the order is completed.
+**AC-3 Regression, order creation unaffected** (FR-05)
+- Given an order is submitted with valid items
+- When payment succeeds
+- Then the order status remains "PAID" (or the existing success status)
+- And invoice generation completes successfully
 
-### FR-05: Invalid inputs are handled gracefully
-- Given a customer submits incomplete or invalid order details
-- When required fields are missing or invalid
-- Then the system shows clear, actionable validation messages and does not create an order.
-
-### FR-06: Order confirmation is shown after successful purchase
-- Given a valid order is submitted
-- When the order is persisted
-- Then the customer sees an order confirmation page or message including the order reference and next steps.
-
-### FR-07: PDF invoice is generated for the order
-- Given an order is successfully placed
-- When the user requests or the system generates the invoice
-- Then a downloadable PDF invoice is produced containing invoice number, date, customer details, itemized line items, totals, and company details matching the sample bill fields.
-
-### FR-08: Admin can process orders
-- Given an admin user accesses the admin/orders view
-- When they view an order
-- Then they can mark the order as processed and see the updated status.
-
-### FR-09: Secrets are not committed to the repository
-- Given the repository is prepared for development or deployment
-- When configuration is required
-- Then credentials are supplied via environment variables and no secrets are present in source control.
+**AC-4 Negative, invalid currency configuration** (FR-06, FR-07, FR-08)
+- Given the application is misconfigured with an unsupported currency code
+- When an order is submitted
+- Then the API responds with a validation/config error
+- And no order is created
+- And inventory is not decremented
 
 ## Out of Scope
-- Native mobile applications (this ticket covers a web storefront only)
-- Advanced inventory forecasting, warehouse management, or ERP integrations
-- Email-based order notifications (not required by the current user story)
-- Detailed payment provider selection and deep payment customization (payment provider choice is out-of-scope; integration can be isolated to a sandbox/mock for initial delivery)
+- Real payment gateway integration (separate enhancement ENH-012), per the story.
+- Anything not in the story, including multi-currency support, currency conversion, and exchange rates, is not part of this work. These are Not Specified and are treated as out of scope (see Assumption A-01).
 
 ## Open Questions / Assumptions
-- Payment provider: Which online payment gateway should be used in production? (open)
-- Confirm the final, authoritative company postal address and contact phone number to display on the site and invoice. (open)
-- Invoice PDF exact styling: the sample bill is provided but final font/spacing decisions need confirmation. (assumption: match fields and general layout; exact styling may be iterated)
-- Admin authentication: method and user management are not specified; assume a protected admin interface or simple endpoint with basic auth until requirements are provided. (assumption)
-- Provided assets: repository indicates a company logo and a sample bill screenshot are available; confirm high-resolution logo and source for invoice template if precise matching is required. (open)
+The user has not answered these. Each has a labelled working assumption, which is not a decision. The assumptions need confirmation.
 
-
+| ID | Gap in the story | Question | Labelled assumption (unconfirmed) |
+|---|---|---|---|
+| OQ-01 | Where the currency is configured, and which codes are supported: Not Specified | Is currency an env var, a config file, or a constant? Is INR the only supported code? | A-01: A single configured currency value exists, and "INR" is the only supported value. Any other value is "unsupported" for AC-4. The configuration mechanism is Not Specified and is left to design. |
+| OQ-02 | Status code and message for the unsupported-currency error: Not Specified. The story says only "validation/config error". | Which HTTP status (400, 422, or 500) and which message or error code? A misconfiguration is arguably a server-side error. | A-02: The error follows the existing error shape (`{'error': <message>}`). The status is Not Specified. The existing order endpoint returns 400 for `ValueError`. |
+| OQ-03 | "Minor units if applicable (per existing adapter contract)" | Is the existing contract `amount_cents` (x100) correct for INR (paise)? | A-03: The existing contract is unchanged. The amount is the order total x100 as an integer, now labelled as paise for INR. |
+| OQ-04 | Invoice format: "₹ and/or INR" | Must the invoice show the symbol, the code, or both? Where (line items, totals, header)? | A-04: The existing "₹" is kept on all amounts, and "INR" may be added. Either satisfies AC-2 provided "USD" never appears. |
+| OQ-05 | Existing USD orders and invoices: Not Specified | Are historical orders or invoices (including PDFs already in `storage/invoices/`) migrated or regenerated? | A-05: Only new charges and newly generated invoices are affected. No back-fill or regeneration is assumed. |
+| OQ-06 | Payment adapter file path: Not Specified ("payments layer (adapter)") | Which file is the adapter? | A-06: The adapter is `dev/payments/interface.py` and `dev/payments/mock.py`. `dev/app/services/payment_adapter.py` is a possible second adapter. This is unconfirmed. |
+| OQ-07 | "Order/invoice formatting uses INR": which order surfaces? | Do API responses, the order record, or any currency field need to change? Should orders store a currency field? | A-07: No new data field is required. Only the charge currency and invoice rendering change. |
+| OQ-08 | `dev/app/services/order_service.py` (the second order path) | Is it in scope? It does not currently call a payment adapter. | A-08: Only `dev/services/order_service.py` is in scope, per the story's affected components. The `dev/app` path is excluded unless confirmed. |
+| OQ-09 | Success status wording: the story says "PAID (or existing success status)". The code uses `order_status='PROCESSING'` and `payment_status='SUCCESS'`. | Which value is the baseline for the regression check? | A-09: The existing success status values are the baseline and are unchanged. |
+| OQ-10 | Invoice code paths: invoices are generated by `dev/services/invoice.py` and `dev/app/services/pdf_worker.py`, and an HTML template exists. | Which are in scope for FR-03 and FR-04? | A-10: All invoice renderers that show amounts are in scope. This is unconfirmed. |
+| OQ-11 | Timing of the currency check (AC-4) | Should the currency be validated before any DB writes or inventory change? In `dev/services/order_service.py`, inventory is decremented before the charge. | A-11: Validation occurs before any order is created or inventory is decremented, as AC-4 requires. How this is done is left to design. |

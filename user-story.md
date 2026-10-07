@@ -1,35 +1,71 @@
-# Jira Issue: VNK-1 — Implement feature flagging for new checkout flow
-
-**Direct Link**: https://your-jira-instance/browse/VNK-1
+# VNK-98: INR currency alignment for payments and invoices
 
 ## Metadata
-- Issue Key: VNK-1
-- Issue Type: Story
-- Status: To Do
-- Priority: Medium
-- Assignee: Unassigned
-- Reporter: Product Owner
-- Labels: feature-flag, checkout
-- Components: checkout-service
+| Field | Value |
+|---|---|
+| Key | VNK-98 |
+| URL | https://sonambavisetti.atlassian.net/browse/VNK-98 |
+| Type | Story |
+| Status | To Do |
+| Priority | Medium |
+| Parent | VNK-10 |
+| Reporter | SONAM BAVISETTI |
+| Assignee | Unassigned |
+| Labels / Components / Fix versions | None |
+| Created | 2026-09-22 |
+| Updated | 2026-09-22 |
+| Due date | None |
 
 ## Description
-Implement a feature-flagged rollout of the new checkout flow so the engineering team can perform progressive rollout, A/B testing, and quick rollback if issues occur. The new flow introduces a redesigned UI and a revised payment validation sequence.
 
-## Acceptance Criteria
-> - [ ] AC-1: The new checkout flow can be toggled on/off by a configuration flag (env or feature service) per environment.
-> - [ ] AC-2: When feature flag is OFF, existing checkout flow remains unchanged for all users.
-> - [ ] AC-3: When feature flag is ON for a user segment, that segment sees the new flow end-to-end including payment validation.
-> - [ ] AC-4: Rollback switches the flow back to the old implementation without data loss.
-> - [ ] AC-5: Metrics emitted (checkout_start, checkout_complete, payment_failure) with tag `flow: new|old`.
+### Traceability
+- Approved Enhancement ID: VNK-VNK-3-ENH-002
+- Original gap: Payment charge uses currency 'USD' while invoice uses ₹; amounts have inconsistent currency handling.
+- Proposed improvement: Standardize end-to-end to INR: charge in INR and ensure order/invoice formatting uses INR consistently.
 
-## Notes
-- Do not migrate production data schema in a way that blocks rollback.
-- Consider using a lightweight feature flagging service or environment-variable toggle.
+### Business objective
+- Prevent accounting/payment inconsistencies and ensure correct customer-facing currency.
 
-## Related Issues
-- Blocks: VNK-10 (payment gateway hardening)
-- Relates to: VNK-2 (checkout UI redesign)
+### Personas
+- Customer (pays/receives invoice)
+- Admin/accounting (reconciliation)
 
----
+### Affected components
+- dev/services/order_service.py (payment call)
+- payments layer (adapter)
+- invoice generation formatting
 
-*This user story was created locally as a simulated MCP/Jira fetch for demo purposes. To perform a live fetch, provide MCP/Jira credentials or a reachable MCP endpoint.*
+### Out of scope
+- Real payment gateway integration (covered by separate enhancement ENH-012).
+
+## Acceptance Criteria (BDD)
+
+**Scenario: Charge uses INR**
+- Given an order is submitted with valid items and totals
+- When the system sends the charge request to the payment adapter
+- Then the currency passed to the adapter is "INR"
+- And the charged amount equals the order total in minor units if applicable (per existing adapter contract)
+
+**Scenario: Invoice displays INR consistently**
+- Given an order is successfully created and an invoice PDF is generated
+- When the invoice is rendered
+- Then the currency symbol and/or currency code shown is INR-consistent (₹ and/or "INR")
+- And no part of the invoice shows "USD"
+
+**Scenario: Regression - order creation unaffected**
+- Given an order is submitted with valid items
+- When payment succeeds
+- Then the order status remains "PAID" (or existing success status)
+- And invoice generation completes successfully
+
+**Scenario: Negative - invalid currency configuration**
+- Given the application is misconfigured with an unsupported currency code
+- When an order is submitted
+- Then the API responds with a validation/config error
+- And no order is created
+- And inventory is not decremented
+
+## Related links
+- Parent: VNK-10
+- Issue links: none; subtasks: none; attachments: none; comments: 0
+- Related enhancement referenced in text: ENH-012 (real payment gateway, out of scope)
