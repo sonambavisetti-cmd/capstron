@@ -1,35 +1,69 @@
-# Jira Issue: VNK-1 — Implement feature flagging for new checkout flow
+# Jira Issue: VNK-2 — Enable customers to search and filter products by category, material, size, and specifications for faster product discovery
 
-**Direct Link**: https://your-jira-instance/browse/VNK-1
+**Direct Link**: [View in Jira](https://sonambavisetti.atlassian.net/browse/VNK-2)
 
 ## Metadata
-- Issue Key: VNK-1
-- Issue Type: Story
-- Status: To Do
-- Priority: Medium
-- Assignee: Unassigned
-- Reporter: Product Owner
-- Labels: feature-flag, checkout
-- Components: checkout-service
+| Field | Value |
+|-------|-------|
+| Issue Key | VNK-2 |
+| Issue Type | Story |
+| Status | To Do |
+| Priority | Medium |
+| Assignee | Not Available |
+| Reporter | SONAM BAVISETTI |
+| Labels | Not Available |
+| Components | Not Available |
+| Sprint | Not Available |
+| Epic | Not Available |
 
 ## Description
-Implement a feature-flagged rollout of the new checkout flow so the engineering team can perform progressive rollout, A/B testing, and quick rollback if issues occur. The new flow introduces a redesigned UI and a revised payment validation sequence.
+Description:
+
+As a business customer or dealer,I want to search for products by name, category, or specifications and filter results by material type (PVC/PP/Board), size, and customization options,so that I can quickly find the exact products I need without browsing the entire catalog.
+
+Business Value
+
+- Improves customer experience and product discovery
+- Reduces time to find relevant products
+- Increases enquiry conversions for targeted products
+- Supports customers with large product catalogs
+Technical Scope
+
+- Frontend: Search input + filter dropdowns/checkboxes
+- Backend: Search API endpoint with query parameters
+- Database: Add indexes for product search optimization
+- Testing: Unit tests + E2E tests with Playwright
 
 ## Acceptance Criteria
-> - [ ] AC-1: The new checkout flow can be toggled on/off by a configuration flag (env or feature service) per environment.
-> - [ ] AC-2: When feature flag is OFF, existing checkout flow remains unchanged for all users.
-> - [ ] AC-3: When feature flag is ON for a user segment, that segment sees the new flow end-to-end including payment validation.
-> - [ ] AC-4: Rollback switches the flow back to the old implementation without data loss.
-> - [ ] AC-5: Metrics emitted (checkout_start, checkout_complete, payment_failure) with tag `flow: new|old`.
+Acceptance Criteria:
+ AC1 â€” Product Search Scenario: Customer searches for a product   Given the customer is on the Products page   When the customer enters "PVC File" in the search box   Then matching products should be displayed   And non-matching products should be hidden   And search results count should be displayed
 
-## Notes
-- Do not migrate production data schema in a way that blocks rollback.
-- Consider using a lightweight feature flagging service or environment-variable toggle.
+ AC2 â€” Filter by Material Type Scenario: Customer filters products by material   Given the customer is on the Products page   When the customer selects "PVC" from the material filter   Then only PVC products should be displayed   And other material products should be hidden
+
+ AC3 â€” Filter by Size Scenario: Customer filters products by size   Given the customer is viewing filtered products   When the customer selects size "A4" from the size filter   Then only products available in A4 size should be displayed
+
+ AC4 â€” Combined Search and Filter Scenario: Customer uses search with filters   Given the customer has entered a search term   When the customer applies material and size filters   Then products matching both search term and filters should be displayed
+
+ AC5 â€” Clear Filters Scenario: Customer clears all filters   Given the customer has applied multiple filters   When the customer clicks "Clear All Filters"   Then all products should be displayed   And all filter selections should be reset
+
+ AC6 â€” No Results Handling Scenario: Search returns no results   Given the customer is on the Products page   When the customer searches for a product that doesn't exist   Then a "No products found" message should be displayed   And suggestions to clear filters should be shown
+
+ AC7 â€” Mobile Responsive Search Scenario: Customer searches on mobile device   Given the customer is using a mobile device   When the customer uses search and filters   Then the search and filter controls should be easily accessible   And results should display properly on small screens
+
+Labels: search, filters, product-discovery, frontend, backend
 
 ## Related Issues
-- Blocks: VNK-10 (payment gateway hardening)
-- Relates to: VNK-2 (checkout UI redesign)
+Not Available
+
+## Attachments & Links
+Not Available
+
+## Recent Comments
+Not Available
 
 ---
 
-*This user story was created locally as a simulated MCP/Jira fetch for demo purposes. To perform a live fetch, provide MCP/Jira credentials or a reachable MCP endpoint.*
+## Notes
+- Fetched read-only from Jira; no changes made to the issue.
+- Assignee, components, sprint, epic, links, and comments were empty in Jira.
+- Previous user-story.md (VNK-1) backed up under backups/.

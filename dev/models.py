@@ -11,6 +11,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -28,6 +29,11 @@ def gen_uuid() -> str:
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (
+        Index("ix_products_material", "material"),
+        Index("ix_products_category", "category"),
+        Index("ix_products_is_active", "is_active"),
+    )
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
     sku = Column(String(64), unique=True, nullable=False)
@@ -37,10 +43,47 @@ class Product(Base):
     quantity_available = Column(Integer, nullable=False, default=0)
     image_url = Column(String(1024))
     is_active = Column(Boolean, default=True)
+    # VNK-2: search/filter attributes. material is validated in the service layer
+    # (PVC, PP, BOARD); no DB CheckConstraint because SQLite cannot add one via ALTER.
+    category = Column(String(100), nullable=True)
+    material = Column(String(32), nullable=True)
+    specifications = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     order_items = relationship("OrderItem", back_populates="product")
+    sizes = relationship("ProductSize", back_populates="product", cascade="all, delete-orphan")
+    customizations = relationship(
+        "ProductCustomization", back_populates="product", cascade="all, delete-orphan"
+    )
+
+
+class ProductSize(Base):
+    __tablename__ = "product_sizes"
+    __table_args__ = (
+        UniqueConstraint("product_id", "size", name="uq_product_sizes_product_size"),
+        Index("ix_product_sizes_size_product", "size", "product_id"),
+    )
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    product_id = Column(String(36), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    size = Column(String(32), nullable=False)
+
+    product = relationship("Product", back_populates="sizes")
+
+
+class ProductCustomization(Base):
+    __tablename__ = "product_customizations"
+    __table_args__ = (
+        UniqueConstraint("product_id", "option", name="uq_product_customizations_product_option"),
+        Index("ix_product_customizations_option_product", "option", "product_id"),
+    )
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    product_id = Column(String(36), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    option = Column(String(64), nullable=False)
+
+    product = relationship("Product", back_populates="customizations")
 
 
 class Customer(Base):
