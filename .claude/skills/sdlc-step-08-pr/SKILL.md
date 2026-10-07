@@ -33,7 +33,7 @@ Run the following checks in order:
 
 ```bash
 git remote -v
-git status
+git status --short
 git branch --show-current
 gh --version
 gh auth status
@@ -66,6 +66,57 @@ gh pr create --repo sonambavisetti-cmd/capstron --base main --head <branch> --ti
 ```
 
 Do not claim a PR exists unless GitHub returns the actual PR URL.
+
+## Mandatory deterministic workflow
+Only proceed in this exact order:
+
+1. Check repo and branch state.
+2. Confirm `gh` is installed and authenticated.
+3. Confirm the remote matches the target repo.
+4. Ensure the branch is pushed.
+5. Create the PR with GitHub CLI.
+6. Return the real PR URL from GitHub output.
+
+If any step fails, stop and report the exact error instead of guessing or retrying blindly.
+
+## Scope and hygiene
+- Only include files relevant to the verified implementation.
+- Do not stage or commit unrelated files such as local databases, backups, generated artifacts, or test outputs unless the user explicitly approves them.
+- If unrelated working tree changes remain, ask for confirmation or exclude them before commit.
+
+## Required blocker outputs
+Use these exact patterns when blocked:
+
+```text
+Phase 8 status: BLOCKED
+Reason: GitHub CLI is not installed.
+Required action: install GitHub CLI and run `gh auth login`.
+```
+
+```text
+Phase 8 status: BLOCKED
+Reason: GitHub authentication is unavailable.
+Required action: run `gh auth login` and retry.
+```
+
+```text
+Phase 8 status: BLOCKED
+Reason: branch push failed.
+Command: git push -u origin <branch>
+Actual error: <full error text>
+```
+
+```text
+Phase 8 status: BLOCKED
+Reason: GitHub PR creation failed.
+Command: gh pr create --repo sonambavisetti-cmd/capstron --base main --head <branch> --title "<title>" --body "<body>"
+Actual error: <full error text>
+```
+
+## Final response rules
+- Only report a PR URL if GitHub returned one.
+- Never fabricate a link or assume success.
+- If the PR could not be created, include the exact blocker and command output.
 
 ---
 
