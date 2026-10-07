@@ -1,0 +1,397 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\node_modules\\@playwright\\test\\cli.js",
+      "test"
+    ],
+    "configFile": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\playwright.config.ts",
+    "rootDir": "C:/Users/SonamBavisetti/Desktop/Capstone/capstron/test-automation/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 7
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/SonamBavisetti/Desktop/Capstone/capstron/test-automation/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 7
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "C:/Users/SonamBavisetti/Desktop/Capstone/capstron/test-automation/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/vnk3-*.spec.ts"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.62.0",
+    "workers": 8,
+    "webServer": {
+      "command": "cd .. && set ADMIN_USERNAME=admin && set ADMIN_PASSWORD=adminpass && set APP_ENV=development && python -m uvicorn dev.app.main:app --host 127.0.0.1 --port 8000",
+      "url": "http://127.0.0.1:8000",
+      "reuseExistingServer": true,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "vnk3-storefront-verification.spec.ts",
+      "file": "vnk3-storefront-verification.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "VNK-3 storefront smoke + E2E verification",
+          "file": "vnk3-storefront-verification.spec.ts",
+          "line": 13,
+          "column": 6,
+          "specs": [
+            {
+              "title": "homepage and site settings expose storefront identity",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 30,
+                      "error": {
+                        "message": "SyntaxError: Unexpected token '<', \"<!doctype \"... is not valid JSON",
+                        "stack": "SyntaxError: Unexpected token '<', \"<!doctype \"... is not valid JSON\n    at C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts:17:22",
+                        "location": {
+                          "file": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts",
+                          "column": 22,
+                          "line": 17
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 15 |\u001b[39m     \u001b[36mconst\u001b[39m home \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m request\u001b[33m.\u001b[39m\u001b[36mget\u001b[39m(\u001b[32m'/'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 16 |\u001b[39m     expect(home\u001b[33m.\u001b[39mstatus())\u001b[33m.\u001b[39mtoBe(\u001b[35m200\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 17 |\u001b[39m     \u001b[36mconst\u001b[39m homeBody \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m home\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 18 |\u001b[39m     expect(homeBody\u001b[33m.\u001b[39mcompany)\u001b[33m.\u001b[39mtoBe(\u001b[32m'Vinayaka File Works'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 19 |\u001b[39m     expect(homeBody\u001b[33m.\u001b[39mstatus)\u001b[33m.\u001b[39mtoBe(\u001b[32m'ok'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 20 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts",
+                            "column": 22,
+                            "line": 17
+                          },
+                          "message": "SyntaxError: Unexpected token '<', \"<!doctype \"... is not valid JSON\n\n\u001b[0m \u001b[90m 15 |\u001b[39m     \u001b[36mconst\u001b[39m home \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m request\u001b[33m.\u001b[39m\u001b[36mget\u001b[39m(\u001b[32m'/'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 16 |\u001b[39m     expect(home\u001b[33m.\u001b[39mstatus())\u001b[33m.\u001b[39mtoBe(\u001b[35m200\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 17 |\u001b[39m     \u001b[36mconst\u001b[39m homeBody \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m home\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 18 |\u001b[39m     expect(homeBody\u001b[33m.\u001b[39mcompany)\u001b[33m.\u001b[39mtoBe(\u001b[32m'Vinayaka File Works'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 19 |\u001b[39m     expect(homeBody\u001b[33m.\u001b[39mstatus)\u001b[33m.\u001b[39mtoBe(\u001b[32m'ok'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 20 |\u001b[39m\u001b[0m\n\u001b[2m    at C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts:17:22\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T09:09:41.019Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\test-results\\vnk3-storefront-verificati-3ec30--expose-storefront-identity-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts",
+                        "column": 22,
+                        "line": 17
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "0b24d3c98775a7d37c09-9d7ea021698cefa32d4c",
+              "file": "vnk3-storefront-verification.spec.ts",
+              "line": 14,
+              "column": 7
+            },
+            {
+              "title": "catalogue lists products with required fields",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 40,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T09:09:41.023Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b24d3c98775a7d37c09-c36cdd0c74fadfb1c121",
+              "file": "vnk3-storefront-verification.spec.ts",
+              "line": 29,
+              "column": 7
+            },
+            {
+              "title": "checkout accepts a valid COD order and returns an order reference",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 189,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T09:09:41.036Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b24d3c98775a7d37c09-d06c63661e61b1e0273a",
+              "file": "vnk3-storefront-verification.spec.ts",
+              "line": 44,
+              "column": 7
+            },
+            {
+              "title": "invalid checkout data is rejected with actionable validation errors",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 27,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T09:09:41.069Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b24d3c98775a7d37c09-77f0c409965bd3e9da76",
+              "file": "vnk3-storefront-verification.spec.ts",
+              "line": 78,
+              "column": 7
+            },
+            {
+              "title": "invoice generation succeeds and exposes a PDF download link",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 139,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T09:09:41.093Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b24d3c98775a7d37c09-4370901c6cb45abd088b",
+              "file": "vnk3-storefront-verification.spec.ts",
+              "line": 92,
+              "column": 7
+            },
+            {
+              "title": "admin can authenticate and mark an order as processed",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "failed",
+                      "duration": 87,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m200\u001b[39m\nReceived: \u001b[31m401\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m200\u001b[39m\nReceived: \u001b[31m401\u001b[39m\n    at C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts:145:36",
+                        "location": {
+                          "file": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts",
+                          "column": 36,
+                          "line": 145
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 143 |\u001b[39m       data\u001b[33m:\u001b[39m { username\u001b[33m:\u001b[39m \u001b[32m'admin'\u001b[39m\u001b[33m,\u001b[39m password\u001b[33m:\u001b[39m \u001b[32m'adminpass'\u001b[39m }\u001b[33m,\u001b[39m\n \u001b[90m 144 |\u001b[39m     })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 145 |\u001b[39m     expect(loginResponse\u001b[33m.\u001b[39mstatus())\u001b[33m.\u001b[39mtoBe(\u001b[35m200\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                    \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 146 |\u001b[39m     \u001b[36mconst\u001b[39m loginBody \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m loginResponse\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\n \u001b[90m 147 |\u001b[39m     expect(loginBody\u001b[33m.\u001b[39mstatus)\u001b[33m.\u001b[39mtoBe(\u001b[32m'ok'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 148 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts",
+                            "column": 36,
+                            "line": 145
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m200\u001b[39m\nReceived: \u001b[31m401\u001b[39m\n\n\u001b[0m \u001b[90m 143 |\u001b[39m       data\u001b[33m:\u001b[39m { username\u001b[33m:\u001b[39m \u001b[32m'admin'\u001b[39m\u001b[33m,\u001b[39m password\u001b[33m:\u001b[39m \u001b[32m'adminpass'\u001b[39m }\u001b[33m,\u001b[39m\n \u001b[90m 144 |\u001b[39m     })\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 145 |\u001b[39m     expect(loginResponse\u001b[33m.\u001b[39mstatus())\u001b[33m.\u001b[39mtoBe(\u001b[35m200\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                    \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 146 |\u001b[39m     \u001b[36mconst\u001b[39m loginBody \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m loginResponse\u001b[33m.\u001b[39mjson()\u001b[33m;\u001b[39m\n \u001b[90m 147 |\u001b[39m     expect(loginBody\u001b[33m.\u001b[39mstatus)\u001b[33m.\u001b[39mtoBe(\u001b[32m'ok'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 148 |\u001b[39m\u001b[0m\n\u001b[2m    at C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts:145:36\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T09:09:41.124Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\test-results\\vnk3-storefront-verificati-c3fcb--mark-an-order-as-processed-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\SonamBavisetti\\Desktop\\Capstone\\capstron\\test-automation\\tests\\vnk3-storefront-verification.spec.ts",
+                        "column": 36,
+                        "line": 145
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "0b24d3c98775a7d37c09-680ade6693113a5c6bdb",
+              "file": "vnk3-storefront-verification.spec.ts",
+              "line": 121,
+              "column": 7
+            },
+            {
+              "title": "no hardcoded secrets are present in repository config",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 11,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T09:09:41.091Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "0b24d3c98775a7d37c09-d399ad6d03cfbd846036",
+              "file": "vnk3-storefront-verification.spec.ts",
+              "line": 157,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-23T09:09:38.560Z",
+    "duration": 3348.4990000000003,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}
