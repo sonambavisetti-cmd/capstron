@@ -1,196 +1,186 @@
-# Architecture
+# Architecture - VNK-98: INR currency alignment for payments and invoices
 
-## Overview
+Inputs: requirements.md (VNK-98, OQ-01..OQ-11 unanswered, assumptions A-01..A-11 unconfirmed). Scope is a small, targeted change to the existing Flask `dev/` stack. No new feature, no schema change, no new dependency.
 
-Vinayaka File Works storefront: a lightweight web application that enables customers to browse products, add items to a cart, complete checkout (Cash on Delivery or Online payment), and download PDF invoices matching the provided sample. Staff can review orders and mark them as processed via a protected admin interface.
+## 1. Overview
 
-This document defines a minimal-yet-production-ready architecture that follows repository constraints: Python server code lives in dev/, Playwright TypeScript tests live in test-automation/, and frontend code (React) is colocated in frontend/ (or built as a static artifact). The design addresses prior design-review feedback by specifying admin authentication, secrets handling, an asynchronous invoice lifecycle, database concurrency controls, backups/encryption, and test alignment.
+Today the charge is hardcoded to `'USD'` in `dev/services/order_service.py` while both invoice renderers print "₹". The design introduces one tiny currency module as the single place where the order currency is read and validated, passes that value to the payment adapter, and labels the invoice renderers explicitly as INR.
 
-## Component Diagram (ASCII / Mermaid)
+Key points:
+- The currency is validated first in `create_order`, before the session is opened. A misconfigured currency therefore cannot create an order, a customer, or change inventory (AC-4).
+- The adapter contract (`amount_cents`, x100) is unchanged. For INR the same integer is paise.
+- Success status values stay `order_status='PROCESSING'`, `payment_status='SUCCESS'`. The literal "PAID" is not produced by the code and is not introduced (A-09).
+- Out of scope: the FastAPI path under `dev/app/`, real gateway (ENH-012), multi-currency, conversion, back-fill of old invoices.
 
-```mermaid
-flowchart LR
-  Browser[Browser (Customer)] -->|HTTPS| Frontend[React SPA - storefront]
-  Browser -->|HTTPS| AdminUI[React SPA - admin]
-  Frontend -->|HTTPS REST| API[Backend API - FastAPI]
-  AdminUI -->|HTTPS REST| API
-  API -->|SQL| DB[(Postgres)]
-  API -->|enqueue job| Queue[(Redis + RQ)]
-  Queue -->|worker| Worker[Background Worker]
-  Worker -->|generate| PDF[ReportLab PDF generator]
-  Worker -->|store| ObjectStore[(S3 / MinIO)]
-  API -->|webhook / REST| Payment[Payment Provider (Stripe)]
-  API -->|auth/session| Auth[Session Store (Redis)]
-  API -->|logs/metrics| Observability[Logging & Monitoring]
+## 2. Scope decision (OQ-08, OQ-06, OQ-10)
+
+| Path | Stack | Decision | Reason |
+|---|---|---|---|
+| `dev/api/orders.py` -> `dev/services/order_service.py` | Flask | IN | The story's named component; the only order path that calls a charge with a currency. |
+| `dev/payments/interface.py`, `mock.py` | Flask path | IN (no code change expected) | Contract already takes `currency`. The mock ignores it. Only the caller changes. See ADR-04. |
+| `dev/services/invoice.py` | Flask path | IN | Hardcodes "₹"; called by `create_order`. Needs explicit INR label. |
+| `dev/app/services/pdf_worker.py` | FastAPI path | IN (renderer only) | Same "₹" hardcoding and FR-03/FR-04 apply to every invoice renderer that shows amounts (A-10). It is a pure rendering change with no order-flow coupling. |
+| `dev/app/services/order_service.py`, `dev/app/main.py`, `dev/app/api/orders.py` | FastAPI | OUT | Does not call any payment adapter, so there is no USD charge to fix and no ordering problem to solve. Adding a currency check there would be new behavior beyond the story (A-08). |
+| `dev/app/services/payment_adapter.py` | FastAPI | OUT, no change | Already defaults `currency="INR"`, which is consistent. Left as is. |
+| `dev/templates/invoice_template.html` | n/a | OUT | No code references it (grep found no loader); it has no currency symbol and no "USD". Not rendered, so FR-04 cannot be violated through it. Revisit only if a renderer starts using it. |
+
+Note on A-08 vs A-10: A-08 excludes the `dev/app` order path, A-10 includes all invoice renderers. These are compatible: `pdf_worker.py` is included as a renderer only. This partial inclusion is a judgement call; see Section 11.
+
+## 3. Component diagram
+
+```
+ Client
+   | POST /api/orders
+   v
+ dev/api/orders.py  (Flask blueprint)
+   |  maps CurrencyConfigError -> 500 {'error': ...}
+   |  maps ValueError          -> 400 {'error': ...}   (unchanged)
+   v
+ dev/services/order_service.py :: create_order(payload)
+   |  1. get_order_currency()  <---- dev/services/currency.py  (NEW)
+   |        reads env ORDER_CURRENCY (default "INR"), validates against {"INR"}
+   |        raises CurrencyConfigError on failure
+   |  2. validate_order_payload(payload)       (unchanged)
+   |  3. open session; customer, order, items, inventory decrement (unchanged)
+   |  4. payment_provider.charge(int(total*100), currency, source, key)
+   |        dev/payments/interface.py + mock.py (unchanged)
+   |  5. on success: PROCESSING / SUCCESS, Invoice row, commit
+   |  6. dev/services/invoice.py :: generate_invoice  (INR label added)
+   v
+ storage/invoices/invoice_<id>.pdf
+
+ Separate (FastAPI): dev/app/services/pdf_worker.py :: generate_invoice_pdf  (INR label added; not on the Flask order path)
 ```
 
-Data flow & Order lifecycle summary:
+## 4. Components
 
-Customer -> Frontend -> POST /api/orders -> Backend API
+| Component | File | Change | Responsibility |
+|---|---|---|---|
+| Currency policy | `dev/services/currency.py` (new) | New | `SUPPORTED_CURRENCIES = frozenset({"INR"})`, `CurrencyConfigError`, `get_order_currency()` and an `INVOICE_CURRENCY_LABEL` helper if needed. Single source of truth for the code. |
+| Order service | `dev/services/order_service.py` | Edit | Calls `get_order_currency()` as the first statement of `create_order`; passes the result to `charge()` instead of `'USD'`. |
+| Orders API | `dev/api/orders.py` | Edit | Adds an `except CurrencyConfigError` branch returning the existing `{'error': msg}` shape with a 5xx status. |
+| Payment contract | `dev/payments/interface.py`, `mock.py` | None | Unchanged. Parameter name `amount_cents` is kept (ADR-04). |
+| Flask invoice renderer | `dev/services/invoice.py` | Edit | Adds an explicit "Currency: INR" line and "(INR)" in the Price/Total column headings. Keeps "₹" subject to the glyph check in Section 10. |
+| FastAPI invoice renderer | `dev/app/services/pdf_worker.py` | Edit | Same labelling as above. |
+| Tests | `dev/tests/` (pytest), `test-automation/` (Playwright/TypeScript) | New | See Section 9. |
 
-1. API validates the request and attempts a short-lived inventory reservation (see Inventory Reservation below). API creates an Order record in the DB with status "pending" and payment_status "pending" inside a transaction. The creation is tied to an Idempotency-Key header (see Idempotency section) to avoid duplicate orders from retries.
+## 5. Data model
 
-2. For ONLINE payments: API creates a payment session with the payment provider (Stripe adapter) and returns the session info to the frontend. The final order confirmation only occurs after the payment provider notifies the system (webhook) that the payment succeeded. The webhook handler verifies the provider signature, updates payment_status to "paid" and order_status to "confirmed" (transactionally), and then enqueues final invoice PDF generation (worker).
+No change. No migration. No `currency` column on `Order` or `Invoice` (A-07): with INR as the only supported value a stored column would be a constant, and storing it would invite the multi-currency scope the story excludes. Historical rows and PDFs are untouched (A-05).
 
-3. For Cash on Delivery (COD): after the order is persisted and basic validation completes, the API marks the order_status as "confirmed" and enqueues final invoice generation immediately (or at admin confirmation if business requires).
+Configuration (not persisted):
+| Key | Source | Default | Valid values |
+|---|---|---|---|
+| `ORDER_CURRENCY` | environment variable | `INR` when unset | `INR` only |
 
-4. Invoice generation: Workers generate the final invoice PDF only when the order is in a final/confirmed state (paid for ONLINE flows or confirmed for COD). Worker stores the PDF in object storage and updates the Invoice record: status transitions from pending -> ready|failed. Frontend may poll GET /api/orders/:id/invoice or GET /api/orders/:id to determine invoice readiness and fetch a signed URL to download the PDF when ready.
+## 6. API surface
 
-Idempotency (Order/Payment):
-- Require an Idempotency-Key header on POST /api/orders and on payment creation endpoints. The backend persists the Idempotency-Key (Redis or DB) with a TTL (24 hours) mapping to the canonical order_reference and returned response. Repeated requests with the same key return the original order response rather than creating duplicates.
+| Endpoint | Change |
+|---|---|
+| `POST /api/orders` | Success: unchanged, `201 {'status': 'created', 'order_id': ...}`. New failure: when the configured currency is not supported, `500 {'error': 'unsupported currency configuration'}` (see ADR-02, OQ-02). Other errors unchanged (`ValueError` -> 400). |
+| `GET /api/orders/<id>` | Unchanged. It returns `status` (e.g. `PROCESSING`) and `total_amount`; no currency field is added (A-07). |
+| Invoice download endpoints | Unchanged routes; the PDF content changes. |
 
-Inventory Reservation (locking algorithm):
-- Primary strategy: attempt a fast reservation using Redis (reserve a quantity token per product) with a reservation TTL of 10 minutes. Reservation flow:
-  - On POST /api/orders: reserve desired quantities in Redis (atomic decrement of available reservation tokens). If the reservation succeeds, create DB Order in 'pending' state without decrementing the authoritative "available_quantity" yet.
-  - Start payment flow (ONLINE) or mark confirmed (COD). If payment succeeds within reservation TTL, finalize the order in a DB transaction that decrements available_quantity (SELECT ... FOR UPDATE) and sets order_status to confirmed.
-  - If reservation TTL expires before confirmation, reservation is released and the order must be marked expired / failed; the customer must retry.
-- Fallback: if Redis is unavailable, use a DB transactional approach with SELECT ... FOR UPDATE to lock product rows and verify/decrement stock within the same transaction before creating the confirmed order. Documented fallbacks ensure no double-selling.
-- Monitoring: capture reservation TTL expirations, reservation failures, and lock contention metrics; add stress tests to validate behavior under concurrent checkout.
+## 7. Data flow
 
-Product-list caching & performance plan:
-- Use Redis short TTL cache for GET /api/products (recommended TTL 30s) with cache busting on product updates. Serve images via CDN (CloudFront) or S3 presigned URLs cached by CDN.
-- Invalidation: on product updates, publish an event (Pub/Sub or Redis pub/sub) to invalidate relevant cache keys or increment a version token used in cache keys.
-- Load testing: define a k6 or locust scenario that simulates realistic browse+checkout traffic. Acceptance criterion: p95 product-list latency < 500ms under expected concurrency (define expected concurrent users in project plan). Attach a load test report as part of Phase 3 deliverables.
+Success path:
+1. `POST /api/orders` -> `create_order`.
+2. `get_order_currency()` returns `"INR"`.
+3. Payload validation, customer, order, items, inventory decrement, subtotal and total (unchanged).
+4. `charge(int(total * 100), "INR", source, idempotency_key)`; amount is paise.
+5. On `pay.success`: `payment_status='SUCCESS'`, `order_status='PROCESSING'`, Invoice row `PENDING`, commit.
+6. `generate_invoice(order.id)` writes the PDF with the INR label and sets the invoice to `READY`.
+7. API returns 201.
 
-SiteSettings / CompanyProfile (authoritative content):
-- Add a SiteSettings table (company_name, address_lines, phone, logo_s3_key, invoice_footer_template) used by the frontend and PDF generator to ensure consistent company details across homepage and invoices.
+Unsupported currency path (AC-4):
+1. `ORDER_CURRENCY=USD` (for example). `get_order_currency()` raises `CurrencyConfigError` at step 2 of the success path, before `SessionLocal()` is opened and before `validate_order_payload`.
+2. No Customer, Order, OrderItem, Invoice row, or inventory change exists, because no DB session has been touched. FR-07, FR-08 and NFR-03 hold by construction rather than by rollback.
+3. The API returns the error response. The offending value is logged server-side, not returned.
 
-CI / Secrets enforcement:
-- Add `.env` to `.gitignore` and configure a CI job that runs a secret scanner (e.g., detect-secrets or GitHub CodeQL secret scanning) as part of PR checks. The job should fail if secrets are detected. Document this in the CI/CD section and add a pre-commit hook template for local scanning.
+Why ordering rather than rollback: in the current code a `ValueError` after the inventory decrement already rolls back, since `SessionLocal()` is used as a context manager without commit. Relying only on that would work but would also run every write before failing, and would couple correctness to the exception path. A check before any write is cheaper and directly testable (OQ-11, A-11).
 
-Load & concurrency artifacts (required for Phase 4):
-- Provide a product-list load test report (k6/locust) demonstrating p95 < 500ms.
-- Provide an inventory concurrency stress test (script + results) showing acceptable levels of reservation success and low double-sell probability.
+## 8. Technology stack
 
-Frontend polling behaviour:
-- Frontend should poll invoice status with exponential backoff or subscribe to a websocket/notification if available. Do not display a signed invoice URL until Invoice.status == ready.
+- Python 3, Flask (`dev/api`, `dev/services`), SQLAlchemy, ReportLab (invoice PDFs), pytest for unit and API tests under `dev/tests/`.
+- Playwright with TypeScript under `test-automation/` for end-to-end verification.
+- No new libraries. Configuration through `os.getenv`, consistent with `dev/db.py` and `dev/api/products.py`.
+- `dev/config.py::get_config()` is deliberately not used: it raises when `SECRET_KEY` is absent, which would make an order request fail for an unrelated reason and complicates tests. Extending the `Config` dataclass is rejected for the same reason (ADR-01).
 
+## 9. Testability (NFR-04)
 
+- Unit: `get_order_currency()` returns INR when unset or `INR`; raises for `USD`, empty string, and lower-case `inr` (see Section 11 on normalisation).
+- Service: patch `payment_provider` with a spy and assert `charge` is called with `currency == "INR"` and `amount == int(total * 100)` (AC-1).
+- Service negative: set the env to `USD`, call `create_order`; assert `CurrencyConfigError`, zero rows in orders, customers and order_items, product `quantity_available` unchanged, and the spy not called (AC-4).
+- API: `POST /api/orders` with misconfigured env returns the 5xx error shape; with valid env returns 201 and `GET` shows `PROCESSING` (AC-3).
+- PDF: extract text from the generated PDF for both renderers; assert "INR" present and "USD" absent (AC-2).
+- Playwright (`test-automation/`): place an order through the API, fetch the invoice, assert the same.
 
-## Components
+## 10. Security considerations
 
-| Component | Responsibility | Technology |
-|-----------|---------------|------------|
-| Frontend (Customer) | Homepage, product listing, cart, checkout, order confirmation, invoice download | React (Vite), React Router, Tailwind (or CSS)
-| Admin UI | Order list, view order, mark processed, admin login | React (same codebase or small static app served under /admin)
-| Backend API | Validation, order persistence, payment orchestration, invoice endpoints, admin endpoints | FastAPI, Pydantic, SQLAlchemy
-| Database | Transactional data: products, orders, invoices, admin users | PostgreSQL (prod), SQLite (dev)
-| Background Worker | Asynchronous PDF generation, webhook processing, retries/DLQ | RQ (Redis) or Celery
-| PDF Generation | Render invoice PDFs matching sample, deterministic server-side templates | ReportLab (Python) — ADR documented
-| Object Storage | Store generated PDFs and uploaded assets; serve via signed URLs | AWS S3 (prod), MinIO/local (dev)
-| Payment Integration | Create payment sessions, process webhooks, verify signatures | Stripe (recommended) via adapter pattern
-| Auth/Session Store | Admin session storage, rate-limiting backstop | Redis (sessions, rate limiting counters)
-| CI/CD & Tests | Unit tests, migrations check, Playwright E2E in TypeScript | GitHub Actions, pytest (dev/), Playwright TS (test-automation/)
-| Observability | Logs, metrics, health checks, alerts | CloudWatch/Datadog or equivalent
+- The currency comes only from server-side configuration, never from the request payload. A client cannot select the charge currency, which closes a tampering path (e.g. paying 1 unit in a cheaper currency). Any `currency` key in the payload is ignored.
+- Error responses do not echo the configured value or environment details; the detail goes to the server log.
+- No secrets are involved. `ORDER_CURRENCY` is not sensitive, but it must be changed only through deployment configuration, not any admin endpoint.
+- Fail closed: an unsupported value stops order creation rather than falling back to a default, so a typo cannot silently charge in the wrong currency.
+- Invoice text uses values from the DB and fixed labels only; no new injection surface.
+- Glyph risk (integrity of the invoice, AC-2): the renderers use the built-in ReportLab Helvetica font, which has no U+20B9 glyph. A check while preparing this design showed the PDF bytes do not contain the UTF-8 form of "₹" and no error is raised, so the symbol may render as a blank or wrong character today. Because of this, the explicit ASCII "INR" label is the reliable part of the AC-2 evidence. The implementation must verify how "₹" renders; if it does not render, replace it with the "INR " prefix (still satisfies "₹ and/or INR"). Embedding a TTF font is not proposed, to keep the change minimal.
 
-Enforcement: All Python server code must live in dev/; Playwright TypeScript code must live in test-automation/. This avoids cross-language test placement issues flagged in the design review.
+## 11. Scalability and reliability
 
-## Data Model (summary)
+- The currency check is an env lookup and a set membership test, negligible cost, with no I/O and no new shared state; it does not affect concurrency or horizontal scaling.
+- Reliability: the check precedes all writes (all-or-nothing). Existing failure behaviour is unchanged.
+- Existing weakness noted, not fixed (out of scope): inventory is decremented before the charge, and the charge is made inside the open transaction. If `charge` raises a non-`ValueError` exception, the session rolls back, but with a real gateway the charge could succeed externally and a later failure (e.g. the commit) would leave a charge without an order. The mock cannot show this. This should be addressed in ENH-012, not here.
+- The idempotency key is passed unchanged; nothing in this change alters retry semantics. Concurrent requests with the same inputs still behave as today.
+- Invoice generation happens after commit; a renderer failure leaves a `PENDING` invoice as today. Unchanged.
 
-- Product: id, sku, name, description, unit_price_cents, image_url, quantity_available, timestamps
-- Customer: id, name, phone, email, address fields, timestamps
-- Order: id, order_reference, customer_id, total_amount_cents, payment_method, payment_status, order_status, timestamps
-- OrderItem: id, order_id, product_id, sku, name, unit_price_cents, quantity, line_total_cents
-- Invoice: id, order_id, invoice_number, invoice_date, pdf_path (S3 key), status (pending|ready|failed), created_at
-- AdminUser: id, username, password_hash, role, mfa_enabled, created_at
+## 12. ADRs
 
-Key constraints:
-- Order creation and inventory decrement are performed in a single DB transaction with row-level locking (SELECT ... FOR UPDATE) to prevent double-selling.
-- OrderItem stores denormalized product name/price to retain historical accuracy.
+### ADR-01: Currency configured by a dedicated env var read in a small module
+- Status: Proposed (resolves OQ-01, adopts A-01).
+- Context: no currency setting exists. `dev/config.py` requires `SECRET_KEY`; other modules use `os.getenv` directly.
+- Decision: new `dev/services/currency.py` reads `ORDER_CURRENCY` (default `INR`), validates against `{"INR"}`, and raises `CurrencyConfigError`. Read at call time, not import time, so tests and a misconfiguration can be exercised without reloading modules, and so a bad value cannot crash the whole app at import.
+- Alternatives: hardcode `'INR'` in the order service (simplest, but then AC-4 has no way to occur and cannot be tested); extend `get_config()` (coupled to `SECRET_KEY`, and validates at startup which skips the per-request AC-4 behaviour); a constant (same problem as hardcoding).
+- Consequences: one more env var; INR is the default so existing deployments need no change.
 
-## API Surface (high-level)
+### ADR-02: Unsupported currency is a server-side error, HTTP 500, not a ValueError
+- Status: Proposed (OQ-02; deviates from the weak baseline in A-02).
+- Context: the story says "validation/config error". The existing handler maps `ValueError` to 400. A bad server setting is not the client's fault, and a 400 would tell the client to change a request that cannot fix it.
+- Decision: `CurrencyConfigError` derives from `Exception`, not `ValueError`, and the Flask handler returns `500 {'error': 'unsupported currency configuration'}`, keeping the existing error shape.
+- Alternative: subclass `ValueError` and get 400 with no handler change (zero extra code). Acceptable if the product owner prefers it; the AC wording is satisfied either way. The status code is the only thing to confirm.
 
-| Endpoint / Event | Method | Purpose / Consumer |
-|------------------|--------|--------------------|
-| GET /api/products | GET | Product list (frontend)
-| GET /api/products/:id | GET | Product detail
-| POST /api/cart | POST | Optional persisted cart
-| POST /api/orders | POST | Submit checkout (frontend) — returns order_reference and order status
-| GET /api/orders/:id | GET | Order detail (frontend / admin)
-| GET /api/orders/:id/invoice | GET | Invoice metadata (status) or redirect to signed S3 URL
-| GET /api/orders/:id/invoice/download | GET | (Optional) proxy download endpoint returning PDF stream
-| PUT /api/orders/:id/status | PUT | Admin — update status (mark processed)
-| POST /api/payments/create-session | POST | Start online payment (frontend)
-| POST /api/payments/webhook | POST | Payment provider webhook (verify signature)
-| POST /api/admin/login | POST | Admin login — server sets secure HttpOnly session cookie
-| POST /api/admin/logout | POST | Destroy admin session
+### ADR-03: Validate before opening the session
+- Status: Proposed (OQ-11, adopts A-11).
+- Decision: `get_order_currency()` is the first statement in `create_order`, before `validate_order_payload` and `SessionLocal()`.
+- Rationale: no writes exist to undo; the behaviour is testable by asserting the DB is untouched. A configuration fault takes priority over payload errors, so the response is the same regardless of the payload.
+- Alternative: validate after payload validation (different error precedence only) or rely on rollback (rejected in Section 7).
 
-Notes:
-- POST /api/orders enqueues async work for PDF generation. APIs return structured error objects and use consistent HTTP status codes.
-- Webhook endpoints validate provider signatures, and payment POSTs require Idempotency-Key handling (stored in Redis for 24h).
+### ADR-04: Keep the adapter contract and the `amount_cents` name
+- Status: Proposed (OQ-03, OQ-06; adopts A-03, A-06).
+- Decision: no change to `PaymentProvider.charge`. Amount stays `int(total_amount * 100)`; for INR this is paise (INR has 2 decimals, so x100 is correct). The mock continues to ignore the currency, so the spy-based test in Section 9 is what proves AC-1.
+- Alternative: rename to `amount_minor` (cleaner, but touches the interface, mock and every caller for no behavioural gain; deferred to ENH-012).
+- Note: `int(total_amount * 100)` truncates a `Decimal`. Prices with at most 2 decimals are exact, so it is correct for current data; flagged only as a latent concern.
 
-## Technology Stack (summary & rationale)
+### ADR-05: Label INR explicitly in both invoice renderers, no template change
+- Status: Proposed (OQ-04, OQ-10; adopts A-04, A-10).
+- Decision: add "Currency: INR" in the header block and "(INR)" in the Price/Total column headings in `invoice.py` and `pdf_worker.py`. Keep "₹" on amounts unless the glyph check (Section 10) shows it does not render, in which case use an "INR " prefix. The unused HTML template is left alone.
+- Alternative: embed a Unicode TTF (reliable "₹", but adds a font asset and a code path); rejected as over-scope.
 
-| Layer | Technology | Rationale |
-|-------|-----------|-----------|
-| Frontend | React + Vite, Tailwind | Fast iteration, familiar ecosystem, static hosting options
-| Backend | FastAPI (Python), Pydantic, SQLAlchemy | Fast development, clear validation, Python ecosystem for PDF
-| DB | PostgreSQL (RDS / managed) | ACID for order/inventory; reliable for transactional workloads
-| Migrations | Alembic | Standard Python migration tool; CI validation
-| PDF | ReportLab (server-side) | Pure-Python, minimal system deps (see ADR)
-| Queue | Redis + RQ (or Celery if needed) | Lightweight async processing and retries
-| Object Storage | S3 (prod), MinIO (dev) | Durable, multi-instance friendly
-| Auth | Server-side sessions (Redis) + optional JWT adapters | Sessions simplify admin flows and CSRF protection
-| Payment | Stripe adapter (test mode) | Strong sandbox and webhooks; adapter keeps provider pluggable
-| Tests | pytest (dev/), Playwright TypeScript (test-automation/) | Aligns with SDLC constraints
-| CI/CD | GitHub Actions | CI runs migrations check, unit tests, and Playwright E2E in separate jobs
+### ADR-06: No stored currency field, no migration
+- Status: Proposed (OQ-07, OQ-05; adopts A-07, A-05).
+- Decision: do not add `currency` to `Order` or `Invoice`; do not regenerate old PDFs.
+- Rationale: INR is the single supported value, and the story's out-of-scope list excludes multi-currency. Add a column only when a second currency is a real requirement.
 
-## Security Considerations (detailed)
-- Secrets: do not commit .env. Add `.env` to `.gitignore`. Use AWS Secrets Manager / GitHub Actions secrets / Vault for production secrets. Enforce secret scanning in CI and pre-commit hooks.
-- Transport: TLS 1.2+ (prefer TLS 1.3) everywhere; HSTS enabled in production.
-- Auth: Argon2id for password hashing (recommended starter params documented and tuned to infra). Admin sessions stored server-side in Redis; cookies set with HttpOnly and Secure. Account lockout after 5 failures; rate-limit login endpoints per IP and per account. Optional TOTP-based MFA.
-- Payment: Use provider tokenization; never handle raw card data. Require Idempotency-Key for payment creation. Validate webhooks by signature.
-- Input validation & DB safety: Pydantic for request validation and SQLAlchemy with parameterized queries. Order/inventory modifications wrapped in DB transactions and row locks.
-- Least privilege: DB credentials with minimal privileges; S3 buckets with restricted access; signed URLs for downloads.
-- Logging & auditing: immutable logs for payments and order state transitions. Redact sensitive PII from general logs.
+## 13. Assumption review and open ambiguities
 
-## Scalability & Reliability
-- Stateless API instances behind LB, autoscaled. Sessions in Redis and DB as single source-of-truth.
-- Background workers scale horizontally; queue depth monitored and worker counts adjusted automatically.
-- Database: managed Postgres with periodic backups (daily), PITR enabled; snapshots retained 30 days; cross-region weekly copy retained 90 days. Restore drills quarterly.
-- CDN for static assets and signed S3 URLs for PDFs to minimize backend bandwidth.
-- Monitoring: request latency, error rate, queue depths, worker failures, payment failure rates. Alerts for service degradation.
-- Cache: short TTL Redis cache for product list (invalidate on updates) to help satisfy product-list latency SLA.
+Adopted as written: A-01, A-03, A-04, A-05, A-06, A-07, A-09, A-10, A-11.
 
-## Migration & Deployment Notes
-- Local dev: SQLite & local filesystem or MinIO; `.env` for local config (not committed).
-- CI: run Alembic migrations against a disposable Postgres container to validate migrations. Run unit tests (dev/) and Playwright tests (test-automation/) in separate CI jobs.
-- Production: managed Postgres (RDS/Azure Database), S3, Redis (managed), deployed services to container platform or PaaS (Render/Heroku/Fly) with environment variables injected from secret manager.
+Adopted with change or concern:
+- A-02 (error status): the architecture proposes 500, not the 400 that the baseline suggests (ADR-02). Needs a product decision, though both satisfy AC-4.
+- A-08 (exclude `dev/app`) combined with A-10 (all renderers): treated as "FastAPI order flow out, `pdf_worker.py` renderer in". If the owner wants zero FastAPI changes, drop that one file; AC-2 is then only met for Flask-generated invoices.
+- A-06: only `dev/payments/` is a real adapter in the Flask path; `payment_adapter.py` is a Stripe stub that is already INR. No conflict.
 
-## ADRs
-
-### ADR-01: Monorepo vs multiple repositories
-- **Status**: Accepted
-- **Context**: Project is small scope and team size is small. The SDLC enforces Python code in dev/ and Playwright tests in test-automation/.
-- **Decision**: Use a monorepo with clear folder boundaries (dev/, frontend/, test-automation/, infra/). This simplifies CI and cross-cutting changes.
-- **Consequences**: Easier coordination, single CI pipeline; requires disciplined ownership and folder-level CI jobs.
-
-### ADR-02: PDF Generation strategy (ReportLab, async workers)
-- **Status**: Accepted
-- **Context**: PDF must be reliable and consistent; server-side generation simplifies access control and storage.
-- **Decision**: Use ReportLab for deterministic PDF generation executed by background workers. Store PDFs in object storage and serve signed URLs. Keep option to revisit HTML->PDF if styling requires WYSIWYG.
-- **Consequences**: Minimal system dependencies and simpler containers; more manual layout coding; possible re-work if exact CSS-based rendering is required.
-
-### ADR-03: Database & migration tooling (Postgres + Alembic)
-- **Status**: Accepted
-- **Context**: Need ACID guarantees for order/inventory and repeatable migrations.
-- **Decision**: Postgres for production; Alembic for migration management; CI runs migrations against a disposable Postgres DB to validate migrations.
-- **Consequences**: Strong transactional guarantees; adds CI complexity and requires migration discipline.
-
-### ADR-04: Payment approach (Pluggable adapter; Stripe recommended)
-- **Status**: Accepted
-- **Context**: Provider choice affects PCI scope and region support.
-- **Decision**: Implement a payment adapter interface and use Stripe in test mode for MVP. Require Idempotency-Key and webhook signature verification.
-- **Consequences**: Faster integration and QA using Stripe sandbox; retains ability to swap providers.
-
-## Risks and Open Questions
-- Payment provider for production (business decision): Stripe recommended; confirm acceptance for local market and fees.
-- Authoritative company contact/address for invoice: required to finalize invoice footer.
-- PDF styling fidelity: if pixel-perfect rendering is required, may need to migrate to HTML->PDF tooling (headless Chromium).
-- Data retention vs legal/financial retention: clarify with legal how long invoices and PII must be retained; record retention policy in infra docs.
-- Admin provisioning and rotation: define onboarding steps and secrets rotation cadence (recommend 90 days).
-- Inventory concurrency at high load: heavy parallel checkout traffic must be load-tested; consider optimistic locking or additional business rules if contention is high.
-
----
-
-Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+Remaining ambiguities for the next phase:
+1. Env var name `ORDER_CURRENCY` is a design proposal, not a requirement.
+2. Case handling: is `inr` accepted? The design is strict (exact `INR` only, after trimming whitespace) so that behaviour is explicit; confirm.
+3. A-09/FR-05 wording: the story says "PAID". The code never writes it. Tests must assert `PROCESSING` and `SUCCESS`; any test expecting "PAID" would fail and be a wrong test, not a regression.
+4. "₹" glyph rendering (Section 10) is unverified at the PDF level; it needs a text-extraction or visual check at implementation time.
+5. Whether the `dev/app` FastAPI order flow should eventually enforce the same currency is deferred; it has no charge today.

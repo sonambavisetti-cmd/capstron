@@ -10,6 +10,7 @@ from reportlab.pdfgen import canvas
 
 from dev.db import SessionLocal
 from dev.models import Invoice, Order
+from dev.services.currency import INVOICE_CURRENCY_LABEL
 from dev.storage.local import LocalStorage
 
 STORAGE = LocalStorage(base_path=os.path.join(os.getcwd(), 'storage'))
@@ -43,12 +44,13 @@ def generate_invoice(order_id: str) -> Optional[str]:
         c.drawString(40, 754, f"Order Ref: {order.id}")
         c.drawString(40, 740, f"Customer: {order.customer.full_name if order.customer else 'Walk-in Customer'}")
         c.drawString(40, 726, f"Email: {order.customer.email if order.customer and order.customer.email else 'n/a'}")
+        c.drawString(40, 712, f"Currency: {INVOICE_CURRENCY_LABEL}")
 
         c.setFont("Helvetica-Bold", 12)
         c.drawString(40, 680, "Item")
         c.drawString(350, 680, "Qty")
-        c.drawString(450, 680, "Price")
-        c.drawString(520, 680, "Total")
+        c.drawString(450, 680, f"Price ({INVOICE_CURRENCY_LABEL})")
+        c.drawString(520, 680, f"Total ({INVOICE_CURRENCY_LABEL})")
         c.setFont("Helvetica", 11)
 
         y = 660
@@ -56,14 +58,14 @@ def generate_invoice(order_id: str) -> Optional[str]:
             product_name = item.product.name if item.product else 'Product'
             c.drawString(40, y, product_name[:40])
             c.drawString(360, y, str(item.quantity))
-            c.drawString(450, y, f"₹{float(item.unit_price):.2f}")
-            c.drawString(520, y, f"₹{float(item.line_total):.2f}")
+            c.drawString(450, y, f"INR {float(item.unit_price):.2f}")
+            c.drawString(520, y, f"INR {float(item.line_total):.2f}")
             y -= 20
 
         c.drawString(40, max(120, y - 20), "Subtotal")
-        c.drawString(520, max(120, y - 20), f"₹{float(order.subtotal):.2f}")
+        c.drawString(520, max(120, y - 20), f"INR {float(order.subtotal):.2f}")
         c.drawString(40, max(100, y - 40), "Total")
-        c.drawString(520, max(100, y - 40), f"₹{float(order.total_amount):.2f}")
+        c.drawString(520, max(100, y - 40), f"INR {float(order.total_amount):.2f}")
         c.drawString(40, 60, "Thank you for ordering with Vinayaka File Works")
         c.save()
 

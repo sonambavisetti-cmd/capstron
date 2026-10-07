@@ -1,119 +1,74 @@
-## Code Review Report
+# Code Review - VNK-98: INR currency alignment for payments and invoices
 
-### Summary
-The dev/ implementation provides a working Phase-5 skeleton: a FastAPI app (dev/app), SQLAlchemy models, local storage adapter and a small pytest suite. Tests were run and the test-suite passes after a few compatibility and correctness fixes. Several important architectural and security gaps remain (mixed Flask/FastAPI artifacts, missing idempotency & reservation behaviour, incomplete payment/webhook handling) that must be addressed before Phase 7 verification.
+Scope: `dev/services/currency.py` (new), `dev/services/order_service.py`, `dev/api/orders.py`, `dev/services/invoice.py`, `dev/app/services/pdf_worker.py` (currency-related diffs only). VNK-2 work in the tree is out of scope. The VNK-2 review is backed up in `backups/pre-VNK-98_20261007-122226/`. Review was static (git diff plus a `py_compile` syntax check); no tests were run and no database was touched.
 
-### Findings
+## 1. Summary
 
-| ID | File | Line | Severity | Issue | Fix Applied? |
-|----|------|------|----------|-------|-------------|
-| R-01 | dev/api/admin.py | 1-25 | BLOCKER | admin list endpoint used `o.status` which does not exist on the Order model (attribute is `order_status`) — would raise AttributeError at runtime. | Yes |
-| R-02 | dev/app/main.py | 125-137 | MAJOR | payments_webhook read request body incorrectly (used sync access to body). In FastAPI the body must be awaited in async handlers. This breaks webhook verification. | Yes |
-| R-03 | dev/services/invoice.py | 23-28 | MAJOR | Invoice status casing mismatch: some modules write 'ready' (lowercase) while other code checks 'READY' (uppercase). Causes inconsistent behaviour when determining availability of invoice download URL. | Yes |
-| R-04 | dev/app/schemas.py | 1-80 | MAJOR | Pydantic v2 compatibility / test friction: used EmailStr (pulls extra dependency email-validator), used removed Field(regex=...) kwarg, and optional fields without defaults caused validation errors in tests. | Yes |
-| R-05 | dev/db.py | 23-31 | MINOR (tests) | init_db() created tables but did not reset DB, causing UNIQUE constraint failures when tests re-ran against the on-disk sqlite file. | Yes (dev only) |
-| R-06 | dev/api/*.py (Flask) | whole dir | MAJOR | Repository contains a second API surface implemented with Flask under dev/api/ alongside the FastAPI app under dev/app/. This duplicates endpoints and is an architectural mismatch with the plan (FastAPI). Needs consolidation. | No |
-| R-07 | dev/services/order_service.py | whole file | MAJOR | Synchronous order flow (inventory decrement, payment charge, invoice generation) in dev/services/order_service.py violates the architecture: no reservation tokens, no idempotency, invoice generation done inline. Also duplicates dev.app.services.order_service with different signatures. | No |
-| R-08 | dev/app/services/payment_adapter.py (StripeAdapter) | whole file | MAJOR | Adapter is a stub; it does not perform real session creation or webhook signature verification. Payment webhooks must be verified (signature) and payment creation must support idempotency. | No |
-| R-09 | dev/api/admin.py and dev/app/auth.py | whole files | MAJOR | Admin auth is stubbed: no server-side session, no Secure/HttpOnly cookie, no rate-limiting or lockout. This is a security gap for admin endpoints. | No |
-| R-10 | repo-wide | - | MINOR | No secrets were found in source files scanned; however CI secret-scan and pre-commit hooks are not present/confirmed. | No (CI missing) |
-| R-11 | dev/tests/ | - | MAJOR | Missing concurrency/load tests required by TASK-16 and concurrency aspects of TASK-09/TASK-07. Provide locust/k6 or pytest-based concurrency tests. | No |
+The implementation matches the plan (TASK-02 to TASK-06). The charge currency now comes only from a server-side, validated setting. The hardcoded `'USD'` is gone, and no `USD` literal remains in non-test `dev/` code. The currency lookup is the first statement in `create_order`, before payload validation and before `SessionLocal()`, so a bad config fails closed with no DB write. The API maps the error to a generic 500. Both renderers show an explicit INR label. No blockers or major issues. No code changes were needed, and no fixes were applied.
 
+## 2. Findings
 
-### Auto-Fixed Items
-- R-01: dev/api/admin.py — Returned `order_status` instead of non-existent `status` (prevents AttributeError).
-- R-02: dev/app/main.py — Converted payments_webhook handler to async and use await request.body(); added docstring noting the TODO for signature verification.
-- R-03: dev/services/invoice.py — Normalized invoice status value to uppercase 'READY' to match other modules.
-- R-04: dev/app/schemas.py — Removed EmailStr to avoid requiring the optional email-validator dependency during tests, switched Field(regex=...) to Field(pattern=...) for pydantic v2, and set optional fields to default to None to avoid unexpected required-field validation errors under pydantic v2.
-- R-05: dev/db.py — init_db() now drops and recreates tables to provide a clean DB state for repeated local test runs (explicit comment advising this is a dev-only convenience).
+| ID | Severity | File | Finding | Action |
+|---|---|---|---|---|
+| F-01 | Info | `dev/services/currency.py` | Offending env value is logged server-side with `%r` (repr escapes control characters, so no log injection). Required by plan TASK-02; the value is not in the exception or the HTTP response. | None |
+| F-02 | Low | `dev/services/currency.py` | `SUPPORTED_CURRENCIES`, `DEFAULT_CURRENCY` and `INVOICE_CURRENCY_LABEL` are separate constants. If a second currency is ever added, the label constant would need to be made per-order. Fine for the INR-only scope. | Note |
+| F-03 | Low | `dev/api/orders.py` | `CurrencyConfigError` is caught before `ValueError`. They are unrelated classes, so the order is harmless, and the status is defined once (`CURRENCY_CONFIG_ERROR_STATUS`). The 500 is an unconfirmed assumption (D-04). | Owner to confirm |
+| F-04 | Low | `dev/api/orders.py` | `request.json or {}` (pre-existing) raises on non-JSON bodies. Not VNK-98. | Out of scope |
+| F-05 | Low | `dev/services/invoice.py`, `pdf_worker.py` | Invoice amounts are now `INR 123.00` and the `₹` glyph is removed (known item: Helvetica lacks U+20B9). The Flask header row is at y=712 and the FastAPI one at y=726. Neither collides with the column headings (680 and 700). Layout is acceptable. | None |
+| F-06 | Low | `dev/app/services/pdf_worker.py` | Imports `dev.services.currency` across the `dev/app` boundary (known item, D-03). The module has no side effects or DB access, so the coupling is minimal. | Owner to confirm D-03 |
+| F-07 | Info | `dev/services/order_service.py` | Charge runs inside the open transaction after the inventory decrement, and `int(total*100)` truncates. Known item, deferred to ENH-012 (D-07). | Deferred |
+| F-08 | Info | repo | `dev.db` shows as modified with an unidentified writer (known item). It was not opened or edited by this review. | User to investigate |
+| F-09 | Info | repo | `__pycache__` directories were updated by the `py_compile` run. They are untracked build artefacts. | None |
 
-Each change was kept minimal and behaviour-preserving where possible; explanations are included as code comments and in the commits.
+No Critical, High or Medium findings.
 
-### Manual Action Required
-- R-06: Consolidate API surface. Decide whether to keep FastAPI (preferred per architecture/impl-plan) or Flask. Remove duplicate Flask blueprints or migrate them to FastAPI endpoints. (Files: dev/api/*)
-- R-07: Replace synchronous inventory/payment flow with reservation + idempotency design (Redis-based reservation tokens, Idempotency-Key store). Migrate dev/services/order_service.py to follow dev/app/services semantics or remove duplicate service. Add transactional SELECT ... FOR UPDATE finalization and fallback when Redis unavailable.
-- R-08: Implement StripeAdapter using the official stripe package or the chosen payment provider. Implement signature verification in the adapter and enforce it in the webhook. Ensure create_session uses idempotency and returns production-grade session info.
-- R-09: Implement admin authentication with server-side sessions stored in Redis, HttpOnly Secure cookies, Argon2 password hashing (or ensure argon2-cffi is present and tuned), and rate-limiting (IP and account). Add tests for lockout and rate-limit behavior.
-- R-11: Add concurrency + load tests: pytest concurrency tests (dev/tests/concurrency/) and a k6/locust script per TASK-16.
-- CI: Add GitHub Actions (or equivalent) jobs for linting (black/isort/ruff), mypy (optional), pytest, alembic migrations validation, Playwright E2E (separate job), and secret scanning.
+## 3. Auto-fixed items
 
+None. No file was edited other than this report. Nothing was staged, committed or pushed.
 
-### Plan Conformance
-| TASK | Implemented? | Notes |
-|------|--------------|-------|
-| TASK-01 Repo skeleton, CI & env | Partial | Repo layout present but CI workflows and .env.example not verified/completed in this branch. |
-| TASK-02 Config loader & secrets enforcement | Partial | dev/config.py exists but CI secret-scan not wired; dev/docs/secrets.md present. |
-| TASK-03 Local infra (Postgres/Redis/MinIO) | Not implemented | No docker-compose/infra artifacts found — tests use SQLite and local filesystem. |
-| TASK-04 Data models & migrations | Partial | SQLAlchemy models exist, but no Alembic versions verified here. dev/db.init_db creates tables for local use. |
-| TASK-05 Storage adapters | Partial | Local adapter implemented (dev/storage/local.py). S3 adapter not implemented. |
-| TASK-06 Backend API skeleton & product endpoints | Partial | FastAPI skeleton in dev/app/main.py present. There is an additional Flask implementation under dev/api/ that must be consolidated. Redis caching and image signed URLs not implemented. |
-| TASK-07 Cart/checkout/validation/idempotency | Not implemented | Validation helpers exist; idempotency and reservation flows are TODO. |
-| TASK-08 Payment adapter & webhook | Not implemented | Stripe adapter is a stub; webhook verification is TODO. |
-| TASK-09 Order finalization & inventory | Not implemented | The current implementation reduces inventory synchronously in dev/services; needs migration to planned reservation + transactional finalization. |
-| TASK-10 Background worker & PDF | Partial | PDF generation exists (ReportLab) and an invoice worker skeleton is present; object storage and RQ integration are TODO. |
-| TASK-11 Admin auth & endpoints | Partial | Admin endpoints are present but auth is stubbed; server-side sessions not implemented. |
-| TASK-14 Tests — pytest unit & integration coverage | Partial | Unit tests exist and passed locally (4 tests). Integration and concurrency tests missing. |
+## 4. Manual actions required
 
+1. Confirm the unconfirmed assumptions: D-03 (pdf_worker.py in scope), D-04 (500 for a bad config), D-05 (strict `INR` match, unset defaults to INR).
+2. Investigate what is modifying `dev.db` (tracked file). Do not commit it with VNK-98.
+3. When committing, stage only the five VNK-98 files plus the new tests. The tree also holds staged VNK-2 work on `feature/VNK-2-product-search`; consider a separate branch for VNK-98.
+4. The verify phase must write the tests (TASK-07 to TASK-09) using a temp `DATABASE_URL` set before importing `dev.db`. The existing tests call `init_db()` against the default `dev.db`.
+5. Optionally check visually that the generated PDFs look right with the `INR ` prefix (the D-02 manual check).
+6. Remove the generated `storage/invoices/` files before commit (untracked).
 
-### Security Checklist
-- [x] No hardcoded secrets found in scanned files
-- [ ] Secrets scanning CI job — NOT PRESENT (add detect-secrets/codeql in CI)
-- [ ] Webhook signature verification — NOT IMPLEMENTED (adapter stub)
-- [ ] Admin session hardening (HttpOnly, Secure cookies, rate limiting) — NOT IMPLEMENTED
-- [ ] Input validation — partial (Pydantic schemas used in FastAPI; additional validation required in Flask endpoints and services)
-- [ ] Parameterized DB access — SQLAlchemy ORM used; review raw SQL if added later
+## 5. Plan conformance
 
+| Item | Result |
+|---|---|
+| TASK-02 currency module: constants, `CurrencyConfigError(Exception)` (not `ValueError`), call-time env read, trim, unset gives INR, empty, whitespace, `inr` and `USD` raise, generic message, no import side effects | Conforms |
+| TASK-03 `get_order_currency()` is the first statement, before `validate_order_payload` and `SessionLocal()`; charge uses `currency`; amount, idempotency key and statuses unchanged; payload `currency` ignored | Conforms |
+| TASK-04 `except CurrencyConfigError` returns the exact message with a single status constant; `ValueError` gives 400 unchanged; value not echoed | Conforms |
+| TASK-05 Flask renderer: "Currency: INR" header, "Price (INR)" and "Total (INR)" headings, `INR ` amount prefix, no template change | Conforms |
+| TASK-06 FastAPI renderer: same labelling, only `pdf_worker.py` changed in `dev/app/` | Conforms |
+| `dev/payments/`, `dev/templates/`, `dev.db`, `alembic*` | Not touched by VNK-98 diffs |
 
-### Tests run and results
-Commands run locally (from repo root):
-- python -m pip install -r requirements.txt
-- python -m pip install pytest pydantic
-- python -m pytest -q
+Requirement coverage by code:
+- FR-01, FR-02 (charge currency INR, from server config only): met.
+- FR-03, FR-04, FR-09 (invoice labelling in both renderers): met.
+- FR-05, FR-07, FR-08 (success statuses and amount unchanged, payload `currency` ignored): met.
+- FR-06 (fail-closed error): met.
+- AC-1: met in code. AC-2: met in code. AC-3: unchanged success path. AC-4: met in code.
+- AC-1 to AC-4 are not yet proven by tests; that is the verify phase's job.
+- NFR-01 and NFR-03: met. NFR-02 and NFR-04: pending the baseline and regression runs and the new tests.
 
-Test results summary (local):
-- dev/tests/test_app_order_service.py : passed
-- dev/tests/test_pdf_worker.py : passed
-- dev/tests/test_validation.py : passed
+## 6. Security checklist
 
-Overall: 4 passed, 0 failed (after fixes), 12 warnings (mostly deprecation warnings from datetime.utcnow usage in SQLAlchemy/reportlab).
+| Check | Result |
+|---|---|
+| Currency sourced only from server config, not from request payload | Pass. `payload` is never read for currency. |
+| Allow-list validation (exact `INR`) | Pass. |
+| Configured value not echoed in the HTTP response or exception | Pass. Generic message. |
+| Value logged server-side safely | Pass. `%r` escaping; no secrets involved. |
+| Fail-closed on a bad or empty config | Pass. Raises; no default fallback for an empty or invalid value. |
+| Ordering: failure occurs before any DB write or inventory change or charge | Pass. First statement of `create_order`. |
+| Error not swallowed by a broad handler | Pass. No broad `except` in the service or handler. |
+| No injection risks in the renderers | Pass. The label is a constant; amounts are formatted floats. |
+| No new dependencies or secrets | Pass (runtime). `pypdf` is planned test-only. |
+| No `USD` literal left in non-test `dev/` code | Pass (grep). |
+| Syntax check of the five files | Pass (`py_compile`). |
 
-
-### Files changed (auto-fixes)
-- dev/api/admin.py — fixed order status key (created/updated)
-- dev/app/main.py — robust webhook body read (async) and invoice status normalization
-- dev/services/invoice.py — normalized invoice status to 'READY'
-- dev/app/schemas.py — pydantic v2 compatibility (removed EmailStr dependency, pattern vs regex, default None for optional fields)
-- dev/db.py — init_db() now resets DB for repeated local test runs (WARNING: dev-only helper)
-
-Commits created on branch feature/VNK-1 with Co-authored-by: Lead Engineer <lead@vinayaka.example.com>
-
-
-### Commands to run locally
-- Install dependencies: python -m pip install -r requirements.txt
-- Run tests: python -m pytest -q
-- Lint / format (not yet configured in repo): black . ; ruff . ; isort .
-- Type-check (if enabled): mypy dev/
-
-
-### Checklist of remaining tasks to reach Phase 7 (verification)
-- [ ] Consolidate API implementation to FastAPI (remove or migrate Flask blueprints)
-- [ ] Implement Redis-based reservation tokens and Idempotency-Key store (TASK-07)
-- [ ] Implement transactional finalization with SELECT ... FOR UPDATE (TASK-09)
-- [ ] Implement Stripe (or chosen provider) adapter with session creation and secure webhook verification (TASK-08)
-- [ ] Implement server-side admin sessions in Redis + Argon2 password hashing + rate-limits (TASK-11)
-- [ ] Add integration tests that exercise payment webhook handling and invoice enqueue (pytest + fixtures)
-- [ ] Add concurrency stress tests (k6/locust) for inventory reservation (TASK-16)
-- [ ] Add CI jobs for linting, tests, migrations validation, secrets scanning, and Playwright E2E (TASK-17)
-- [ ] Provision local infra orchestration (docker-compose) for Postgres, Redis, MinIO for CI & dev (TASK-03)
-- [ ] Add Alembic migration scripts and CI validation against disposable Postgres (TASK-04)
-
-
----
-
-Phase 6 Gate Recommendation: revise
-
-Rationale: The codebase is in good shape for a Phase-5 skeleton and unit tests pass. However several MAJOR architectural and security items remain (consolidate APIs, reservation/idempotency, payment/webhook verification, admin auth hardening, CI pipelines and concurrency tests). I recommend selecting "revise" so the team can address the items in 'Manual Action Required' before moving to Phase 7 (verification).
-
-Options: approve | discuss | revise | stop
-
-Requested next step: revise (address items R-06..R-09, add CI & concurrency tests)
+Residual risk: the 500 response on a misconfiguration reveals only that the configuration is unsupported. Charge-in-transaction (ENH-012) is accepted.
