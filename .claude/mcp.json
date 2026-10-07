@@ -1,0 +1,28 @@
+{
+  "servers": {
+    "my-mcp-server-9c5d4435": {
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "type": "http"
+    },
+    "my-mcp-server-ff0da58c": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "type": "http"
+    },
+    "playwright": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "generate",
+        "--browser",
+        "chrome",
+        "--codegen",
+        "typescript",
+        "--output-dir",
+        "test-automation/tests"
+      ],
+      "type": "stdio"
+    }
+  },
+  "inputs": []
+}

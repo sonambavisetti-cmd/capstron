@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "echo '{\"systemMessage\": \"SDLC Pipeline active. Current artifacts: $(ls requirements.md architecture.md design-review.md impl-plan.md 2>/dev/null | tr '\\n' ' ' || echo none). Gate approval is REQUIRED before each phase transition. Never skip gates.\"}'",
+        "windows": "powershell -NoProfile -Command \"$artifacts = @('requirements.md','architecture.md','design-review.md','impl-plan.md') | Where-Object { Test-Path $_ }; $msg = if ($artifacts) { $artifacts -join ', ' } else { 'none' }; Write-Output ('{\\\"systemMessage\\\": \\\"SDLC Pipeline active. Existing artifacts: ' + $msg + '. Gate approval REQUIRED before each phase transition. Never skip gates.\\\"}')\"",
+        "timeout": 10
+      }
+    ],
+    "SubagentStart": [
+      {
+        "type": "command",
+        "command": "echo '{\"systemMessage\": \"Subagent starting. Remember: output a gate message after phase completes and STOP — do not auto-proceed.\"}'",
+        "windows": "powershell -NoProfile -Command \"Write-Output '{\\\"systemMessage\\\": \\\"Subagent starting. Remember: output a gate message after phase completes and STOP — do not auto-proceed.\\\"}'\"",
+        "timeout": 5
+      }
+    ],
+    "SubagentStop": [
+      {
+        "type": "command",
+        "command": "echo '{\"systemMessage\": \"Subagent complete. Present the gate message to the user and await explicit approval before proceeding.\"}'",
+        "windows": "powershell -NoProfile -Command \"Write-Output '{\\\"systemMessage\\\": \\\"Subagent complete. Present the gate message to the user and await explicit approval before proceeding.\\\"}'\"",
+        "timeout": 5
+      }
+    ]
+  }
+}
