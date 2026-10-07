@@ -1,12 +1,14 @@
-"""Legacy Flask entrypoint (deprecated).
+from flask import Flask, jsonify, render_template_string
 
-VNK-VNK-1-ENH-001
-This repository previously had two competing storefront "home" experiences:
-- FastAPI monolith (canonical) running on :8000
-- Flask app (legacy) running on :5000
+app = Flask(__name__)
 
-To avoid end-user confusion and enforce a single canonical storefront entry,
-Flask GET / redirects users to the FastAPI storefront UI.
+# Ensure repo root is on sys.path when running the script directly (e.g., python dev/app.py)
+# This helps importing dev.* packages when Python sets sys.path[0] to the script directory.
+import os, sys
+_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
 
 @app.route('/')
 def index():
@@ -285,6 +287,47 @@ def index():
           .form-message.error {
             color: #a62b2b;
           }
+          /* VNK-2: product search and filter */
+          .search-block { margin-top: 28px; }
+          .search-field { display: flex; flex-direction: column; gap: 8px; }
+          .search-field label, .filter-field label {
+            color: var(--primary-dark); font-size: 0.9rem; font-weight: 700;
+          }
+          .search-block input[type="search"], .search-block select {
+            width: 100%; min-height: 44px; border: 1px solid var(--line);
+            background: rgba(255,255,255,0.8); border-radius: 12px;
+            padding: 10px 14px; font: inherit; color: var(--text);
+          }
+          .filters-panel { margin-top: 14px; }
+          .filters-panel summary {
+            cursor: pointer; min-height: 44px; display: flex; align-items: center;
+            font-weight: 700; color: var(--primary-dark);
+          }
+          .filters-row {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+            gap: 16px; align-items: end; margin-top: 8px;
+          }
+          .filter-field { display: flex; flex-direction: column; gap: 8px; }
+          .clear-btn {
+            min-height: 44px; background: transparent; color: var(--primary-dark);
+            border: 1px solid var(--primary); border-radius: 999px;
+            padding: 10px 18px; font-weight: 700; cursor: pointer;
+          }
+          .results-count { margin: 16px 0 10px; color: var(--muted); min-height: 1.4em; }
+          .product-results {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px;
+          }
+          .product-results .card { min-width: 0; overflow-wrap: anywhere; }
+          .product-results .card h3 { margin-bottom: 6px; }
+          .product-results .meta { font-size: 0.9rem; margin-top: 6px; }
+          .product-results .price { margin-top: 10px; font-weight: 700; color: var(--primary-dark); }
+          .no-results, .search-error {
+            padding: 24px; border: 1px dashed var(--line); border-radius: 22px;
+            background: rgba(255,255,255,0.55); text-align: center;
+          }
+          .no-results p { margin: 6px 0 14px; color: var(--muted); }
+          .search-error { color: var(--danger); border-color: var(--danger); }
+          .search-block [hidden] { display: none !important; }
           footer {
             margin-top: 50px;
             padding-top: 24px;
@@ -294,6 +337,9 @@ def index():
           }
           @media (max-width: 820px) {
             .hero, .grid { grid-template-columns: 1fr; }
+            .filters-row { grid-template-columns: 1fr; }
+            .product-results { grid-template-columns: 1fr; }
+            .clear-btn { width: 100%; }
             nav { display: none; }
             header { padding-top: 10px; }
           }
@@ -312,18 +358,273 @@ def index():
             <a class="nav-btn" href="#quote-form">Get a quote</a>
           </header>
 
-Safety:
-- If STOREFRONT_BASE_URL is unset/invalid, default to localhost.
-- Always redirect to <base>/storefront/.
-"""
+          <section class="hero">
+            <div>
+              <span class="eyebrow">Paper & printing solutions</span>
+              <h1>Print smarter. Deliver better.</h1>
+              <p class="lead">
+                Vinayaka File Works helps businesses and families with custom stationery,
+                packaging, printing, and office essentials—delivered with reliable service and quick turnaround.
+              </p>
+              <div class="cta-row">
+                <a class="primary" href="#products">Shop products</a>
+                <a class="secondary" href="#services">Explore services</a>
+              </div>
+              <div class="chips" style="margin-top: 18px;">
+                <span class="chip">No. 42, Market Road, Bengaluru, Karnataka 560001</span>
+                <span class="chip">+91 98765 43210</span>
+              </div>
+              <div class="chips">
+                <span class="chip">Bulk printing</span>
+                <span class="chip">Office supplies</span>
+                <span class="chip">Custom stationery</span>
+              </div>
+            </div>
 
-from __future__ import annotations
+            <div class="hero-card">
+              <div class="product-box">
+                <div class="product-image"></div>
+                <div class="product-meta">
+                  <strong>Premium Office Pack</strong>
+                  <div class="price-row">
+                    <span>Starter bundle</span>
+                    <strong>₹1,499</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
 
-import os
-import sys
-from urllib.parse import urlparse
+          <section class="section" id="products">
+            <div class="section-header">
+              <h2>Popular products</h2>
+              <a href="#">View all →</a>
+            </div>
+            <div class="grid">
+              <div class="card">
+                <div class="mini"></div>
+                <h3>Printed Forms</h3>
+                <p>Custom invoice books, registers, and office forms designed to keep daily operations efficient.</p>
+              </div>
+              <div class="card">
+                <div class="mini"></div>
+                <h3>Packaging Kits</h3>
+                <p>Professional packaging and business stationery for retail, gifting, and courier-ready deliveries.</p>
+              </div>
+              <div class="card">
+                <div class="mini"></div>
+                <h3>Files & Folders</h3>
+                <p>Durable file folders, project tags, and archival materials built for everyday use.</p>
+              </div>
+            </div>
 
-from flask import Flask, redirect
+            <div class="search-block" id="product-search">
+              <div class="search-field">
+                <label for="product-search-input">Search products</label>
+                <input id="product-search-input" type="search" maxlength="100" autocomplete="off"
+                       placeholder="Search by name, material, category or SKU">
+              </div>
+              <details class="filters-panel" id="filters-panel">
+                <summary>Filters</summary>
+                <div class="filters-row">
+                  <div class="filter-field">
+                    <label for="filter-material">Material</label>
+                    <select id="filter-material"><option value="">All</option></select>
+                  </div>
+                  <div class="filter-field">
+                    <label for="filter-size">Size</label>
+                    <select id="filter-size"><option value="">All</option></select>
+                  </div>
+                  <div class="filter-field">
+                    <label for="filter-customization">Customization</label>
+                    <select id="filter-customization"><option value="">All</option></select>
+                  </div>
+                  <button type="button" class="clear-btn" id="clear-filters">Clear All Filters</button>
+                </div>
+              </details>
+              <p class="results-count" id="results-count" aria-live="polite"></p>
+              <div class="search-error" id="search-error" role="alert" hidden>Unable to load products. Please try again.</div>
+              <div class="no-results" id="no-results" hidden>
+                <strong>No products found</strong>
+                <p>Try a different search term or clear your filters.</p>
+                <button type="button" class="clear-btn" id="no-results-clear">Clear All Filters</button>
+              </div>
+              <div class="product-results" id="product-grid"></div>
+            </div>
+
+            <script>
+              // VNK-2: product search + filters. All API data is rendered via textContent only.
+              (function () {
+                const input = document.getElementById('product-search-input');
+                const selMaterial = document.getElementById('filter-material');
+                const selSize = document.getElementById('filter-size');
+                const selCustom = document.getElementById('filter-customization');
+                const clearBtn = document.getElementById('clear-filters');
+                const clearBtn2 = document.getElementById('no-results-clear');
+                const countEl = document.getElementById('results-count');
+                const grid = document.getElementById('product-grid');
+                const noResults = document.getElementById('no-results');
+                const errorEl = document.getElementById('search-error');
+                const panel = document.getElementById('filters-panel');
+                if (!input || !grid || !panel) return;
+
+                const LIMIT = 100;
+                const DEBOUNCE_MS = 250;
+                let timer = null;
+                let controller = null;
+
+                // F-08: open by default on wide viewports, collapsed on narrow ones.
+                const mq = window.matchMedia('(max-width: 820px)');
+                function syncPanel() { panel.open = !mq.matches; }
+                syncPanel();
+                if (mq.addEventListener) mq.addEventListener('change', syncPanel);
+                else if (mq.addListener) mq.addListener(syncPanel);
+
+                function el(tag, className, text) {
+                  const n = document.createElement(tag);
+                  if (className) n.className = className;
+                  if (text !== undefined && text !== null) n.textContent = text;
+                  return n;
+                }
+
+                function fillSelect(select, values) {
+                  const keep = select.value;
+                  while (select.options.length > 1) select.remove(1);
+                  (values || []).forEach(function (v) {
+                    const o = document.createElement('option');
+                    o.value = v;
+                    o.textContent = v;
+                    select.appendChild(o);
+                  });
+                  select.value = keep;
+                }
+
+                function renderCard(p) {
+                  const card = el('div', 'card');
+                  card.setAttribute('data-sku', p.sku || '');
+                  card.appendChild(el('div', 'mini'));
+                  card.appendChild(el('h3', null, p.title));
+                  if (p.description) card.appendChild(el('p', null, p.description));
+                  const bits = [];
+                  if (p.category) bits.push('Category: ' + p.category);
+                  if (p.material) bits.push('Material: ' + p.material);
+                  if (p.sizes && p.sizes.length) bits.push('Sizes: ' + p.sizes.join(', '));
+                  if (p.customizations && p.customizations.length) bits.push('Customization: ' + p.customizations.join(', '));
+                  bits.forEach(function (b) { card.appendChild(el('p', 'meta', b)); });
+                  card.appendChild(el('div', 'price', '₹' + Number(p.price || 0).toFixed(2)));
+                  return card;
+                }
+
+                function render(data) {
+                  errorEl.hidden = true;
+                  while (grid.firstChild) grid.removeChild(grid.firstChild);
+                  const items = data.items || [];
+                  if (!items.length) {
+                    noResults.hidden = false;
+                    countEl.textContent = '0 products';
+                    return;
+                  }
+                  noResults.hidden = true;
+                  items.forEach(function (p) { grid.appendChild(renderCard(p)); });
+                  countEl.textContent = data.total > items.length
+                    ? 'Showing ' + items.length + ' of ' + data.total
+                    : items.length + (items.length === 1 ? ' product' : ' products');
+                }
+
+                function showError() {
+                  while (grid.firstChild) grid.removeChild(grid.firstChild);
+                  noResults.hidden = true;
+                  countEl.textContent = '';
+                  errorEl.hidden = false;
+                }
+
+                async function runSearch() {
+                  if (controller) controller.abort();
+                  controller = new AbortController();
+                  const mine = controller;
+                  const params = new URLSearchParams();
+                  const q = input.value.trim();
+                  if (q) params.set('q', q);
+                  if (selMaterial.value) params.set('material', selMaterial.value);
+                  if (selSize.value) params.set('size', selSize.value);
+                  if (selCustom.value) params.set('customization', selCustom.value);
+                  params.set('limit', String(LIMIT));
+                  try {
+                    const resp = await fetch('/api/products/search?' + params.toString(), { signal: mine.signal });
+                    if (!resp.ok) throw new Error('bad status');
+                    const data = await resp.json();
+                    if (mine !== controller) return;
+                    render(data);
+                  } catch (e) {
+                    if (e && e.name === 'AbortError') return;
+                    if (mine !== controller) return;
+                    showError();
+                  }
+                }
+
+                function clearAll() {
+                  input.value = '';
+                  selMaterial.value = '';
+                  selSize.value = '';
+                  selCustom.value = '';
+                  runSearch();
+                }
+
+                async function loadFilters() {
+                  try {
+                    const resp = await fetch('/api/products/filters');
+                    if (!resp.ok) return;
+                    const f = await resp.json();
+                    fillSelect(selMaterial, f.materials);
+                    fillSelect(selSize, f.sizes);
+                    fillSelect(selCustom, f.customizations);
+                  } catch (e) { /* filters stay at "All" */ }
+                }
+
+                input.addEventListener('input', function () {
+                  clearTimeout(timer);
+                  timer = setTimeout(runSearch, DEBOUNCE_MS);
+                });
+                input.addEventListener('keydown', function (evt) {
+                  if (evt.key === 'Enter') {
+                    evt.preventDefault();
+                    clearTimeout(timer);
+                    runSearch();
+                  }
+                });
+                [selMaterial, selSize, selCustom].forEach(function (s) {
+                  s.addEventListener('change', function () { clearTimeout(timer); runSearch(); });
+                });
+                clearBtn.addEventListener('click', clearAll);
+                if (clearBtn2) clearBtn2.addEventListener('click', clearAll);
+
+                loadFilters().then(runSearch);
+              })();
+            </script>
+          </section>
+
+          <section class="section" id="services">
+            <div class="section-header">
+              <h2>Why customers choose us</h2>
+            </div>
+            <div class="grid">
+              <div class="card">
+                <div class="mini"></div>
+                <h3>Fast turnaround</h3>
+                <p>Quick production timelines for urgent print jobs and repeat office supply orders.</p>
+              </div>
+              <div class="card">
+                <div class="mini"></div>
+                <h3>Quality assurance</h3>
+                <p>Careful print checks, premium paper selection, and a focus on clean finishing details.</p>
+              </div>
+              <div class="card">
+                <div class="mini"></div>
+                <h3>Flexible support</h3>
+                <p>Support for local businesses, schools, shops, and event organizers with tailored order planning.</p>
+              </div>
+            </div>
+          </section>
 
           <section class="section" id="quote-form">
             <div class="section-header">
@@ -527,13 +828,22 @@ from flask import Flask, redirect
 
                   setMessage('Sending...', '');
 
-    parsed = urlparse(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        # Fall back to safe local default.
-        base = "http://localhost:8000"
+                  try {
+                    const formData = new FormData(form);
+                    const payload = {};
+                    for (const [k, v] of formData.entries()) payload[k] = v;
 
-    return base.rstrip("/") + "/storefront/"
+                    const resp = await fetch('/api/quote-enquiries', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload)
+                    });
 
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok) {
+                      setMessage(data.error || 'Unable to submit request. Please try again.', 'error');
+                      return;
+                    }
 
                     setMessage('Thank you! Your enquiry has been submitted.', 'success');
                     form.reset();
@@ -546,30 +856,41 @@ from flask import Flask, redirect
             </script>
           </section>
 
+          <footer id="contact">
+            Vinayaka File Works • Office stationery, printing, and business essentials
+          </footer>
+        </div>
+      </body>
+    </html>
+    ''')
 
 
 # Register API blueprints if available (register individually so one failing import doesn't disable others)
-for _mod in ["products", "cart", "orders", "admin", "invoices", "quote_requests"]:
+for _mod in ['products', 'cart', 'orders', 'admin', 'invoices', 'quote_requests']:
     try:
-        if _mod == "products":
+        if _mod == 'products':
             from dev.api.products import products_bp as bp
-        elif _mod == "cart":
+        elif _mod == 'cart':
             from dev.api.cart import cart_bp as bp
-        elif _mod == "orders":
+        elif _mod == 'orders':
             from dev.api.orders import orders_bp as bp
-        elif _mod == "admin":
+        elif _mod == 'admin':
             from dev.api.admin import admin_bp as bp
-        elif _mod == "invoices":
+        elif _mod == 'invoices':
             from dev.api.invoices import invoices_bp as bp
-        elif _mod == "quote_requests":
+        elif _mod == 'quote_requests':
             from dev.api.quote_requests import quote_bp as bp
         else:
             bp = None
-
         if bp is not None:
             app.register_blueprint(bp)
-    except Exception:
-        pass
+    except Exception as e:
+        # Log and continue; tests may run in environments where DB/backends are missing
+        try:
+            app.logger.warning(f"Could not import dev.api.{_mod}: {e}")
+        except Exception:
+            pass
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
